@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "language": "id",
+  "docsLanguage": "id",
+  "output": "docs",
+  "agents": [
+    "codex",
+    "claude",
+    "gemini",
+    "cursor",
+    "opencode",
+    "copilot",
+    "windsurf",
+    "antigravity"
+  ],
+  "skills": [
+    "quality",
+    "docs",
+    "contracts",
+    "testing",
+    "ui-size",
+    "zero-any",
+    "routes",
+    "forms",
+    "ui-tests",
+    "accessibility",
+    "dependencies"
+  ],
+  "validation": "ask",
+  "git": "feature-pr",
+  "stack": [
+    "javascript",
+    "typescript",
+    "nextjs",
+    "react"
+  ],
+  "skillCatalogRevision": 1
+}

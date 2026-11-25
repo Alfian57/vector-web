@@ -1,0 +1,7 @@
+---
+alwaysApply: true
+---
+<!-- BEGIN my-skill-gweh -->
+<!-- my-skill-gweh-sha256:b7094712faa6c0c586b93d49bb0daf2a2a999841fd17640e77290d87125537cd -->
+Mulai dari [index](../../docs/README.md). Sebelum mengubah kode, baca [skill my-skill-gweh](../../.agents/skills/my-skill-gweh/SKILL.md) dan ikuti bagian yang sesuai; baca hanya panduan skill yang ditautkan pada bagian tersebut. Buka [workflow proyek](../../docs/project/workflow.md) sebelum menjalankan pemeriksaan atau mengubah state Git, lalu ikuti instruksi repository yang lebih spesifik. Untuk tugas database, tanyakan apakah production boleh di-fresh: jika boleh, edit migrasi yang ada; jika tidak, tambahkan migrasi yang menjaga data.
+<!-- END my-skill-gweh -->
