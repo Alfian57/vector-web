@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "@/lib/client";
+import { apiData } from "@/lib/client";
+import { sessionSchema } from "@/lib/api-contracts";
 import type { Account } from "@/lib/domain";
 import { offlineDb } from "@/lib/pwa/storage";
 
@@ -12,13 +13,16 @@ export function useRadarSession(onOwnerChange: () => void) {
   const pending = useRef<AbortController | undefined>(undefined);
   useEffect(() => () => pending.current?.abort(), []);
 
-  const showAccount = useCallback((user: Account | null) => {
-    if (accountId.current !== user?.id) {
-      accountId.current = user?.id;
-      onOwnerChange();
-    }
-    setAccount(user);
-  }, [onOwnerChange]);
+  const showAccount = useCallback(
+    (user: Account | null) => {
+      if (accountId.current !== user?.id) {
+        accountId.current = user?.id;
+        onOwnerChange();
+      }
+      setAccount(user);
+    },
+    [onOwnerChange],
+  );
 
   const loadSession = useCallback(async () => {
     pending.current?.abort();
@@ -27,7 +31,9 @@ export function useRadarSession(onOwnerChange: () => void) {
     const database = offlineDb();
     const { signal } = controller;
     try {
-      const user = await api<Account | null>("session", { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
+      const user = await apiData("session", sessionSchema, {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]),
+      });
       if (signal.aborted) return undefined;
       if (user) await database.accounts.put({ key: "account", account: user }).catch(() => {});
       else await database.accounts.delete("account").catch(() => {});
@@ -51,7 +57,9 @@ export function useRadarSession(onOwnerChange: () => void) {
 
   async function clearSession() {
     pending.current?.abort();
-    await offlineDb().accounts.delete("account").catch(() => {});
+    await offlineDb()
+      .accounts.delete("account")
+      .catch(() => {});
     setSessionIssue(false);
     showAccount(null);
   }

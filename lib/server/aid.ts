@@ -86,7 +86,7 @@ export async function recordAidDelivery(allocationId: string, authorId: string, 
       return false;
     }
 
-    const remaining = allocation.quantity - await deliveredAidQuantity(client, allocationId);
+    const remaining = allocation.quantity - (await deliveredAidQuantity(client, allocationId));
     if (quantity > remaining) throw new RequestError(409, "Jumlah penyaluran melebihi sisa alokasi.");
 
     await client.aidDelivery.create({

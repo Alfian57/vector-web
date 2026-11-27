@@ -25,7 +25,9 @@ describe("P0.4 WhatsApp authentication, linking, recovery, and Fonnte failures",
     const phone = nextTestPhone();
 
     // Unnormalized 08... or invalid phone rejected at server boundary
-    expect((await client.postJson("/api/auth/phone-number/send-otp", { phoneNumber: "081234567890" })).status).toBe(400);
+    expect((await client.postJson("/api/auth/phone-number/send-otp", { phoneNumber: "081234567890" })).status).toBe(
+      400,
+    );
     expect((await client.postJson("/api/auth/phone-number/send-otp", { phoneNumber: "invalid" })).status).toBe(400);
 
     // Send valid OTP
@@ -117,14 +119,21 @@ describe("P0.4 WhatsApp authentication, linking, recovery, and Fonnte failures",
       email: "tujuan-otp@example.test",
       name: "Email Tujuan",
     });
-    expect((await emailClient.postJson("/api/auth/sign-in/email", { email: emailUser.email, password: testPassword })).status).toBe(200);
+    expect(
+      (await emailClient.postJson("/api/auth/sign-in/email", { email: emailUser.email, password: testPassword }))
+        .status,
+    ).toBe(200);
 
-    expect((await client.postJson("/api/auth/phone-number/request-password-reset", { phoneNumber: phone })).status).toBe(200);
+    expect(
+      (await client.postJson("/api/auth/phone-number/request-password-reset", { phoneNumber: phone })).status,
+    ).toBe(200);
     const resetOnlyOtp = await getCapturedOtp(phone, "atur ulang kata sandi");
 
     const unusedPhone = nextTestPhone();
     await clearRateLimits();
-    expect((await client.postJson("/api/auth/phone-number/request-password-reset", { phoneNumber: unusedPhone })).status).toBe(200);
+    expect(
+      (await client.postJson("/api/auth/phone-number/request-password-reset", { phoneNumber: unusedPhone })).status,
+    ).toBe(200);
     // Use reset OTP on link endpoint
     const linkWithResetOtp = await emailClient.postJson("/api/auth/whatsapp/link", {
       phoneNumber: phone,
@@ -154,14 +163,24 @@ describe("P0.4 WhatsApp authentication, linking, recovery, and Fonnte failures",
     // Unverified email cannot sign in
     const unverifiedClient = new TestSession();
     expect(
-      (await unverifiedClient.postJson("/api/auth/sign-in/email", { email: unverifiedEmail.email, password: testPassword })).status,
+      (
+        await unverifiedClient.postJson("/api/auth/sign-in/email", {
+          email: unverifiedEmail.email,
+          password: testPassword,
+        })
+      ).status,
     ).toBe(403);
 
     // Officer links WhatsApp and preserves officer role and original ID
     const officerClient = new TestSession();
-    expect((await officerClient.postJson("/api/auth/sign-in/email", { email: officerEmail.email, password: testPassword })).status).toBe(200);
+    expect(
+      (await officerClient.postJson("/api/auth/sign-in/email", { email: officerEmail.email, password: testPassword }))
+        .status,
+    ).toBe(200);
     const officerPhone = nextTestPhone();
-    expect((await officerClient.postJson("/api/auth/phone-number/send-otp", { phoneNumber: officerPhone })).status).toBe(200);
+    expect(
+      (await officerClient.postJson("/api/auth/phone-number/send-otp", { phoneNumber: officerPhone })).status,
+    ).toBe(200);
     const officerOtp = await getCapturedOtp(officerPhone, "verifikasi akun");
     expect(
       (
@@ -182,8 +201,12 @@ describe("P0.4 WhatsApp authentication, linking, recovery, and Fonnte failures",
     await clearRateLimits();
     const session1 = new TestSession();
     const session2 = new TestSession();
-    expect((await session1.postJson("/api/auth/sign-in/email", { email: farmerEmail.email, password: testPassword })).status).toBe(200);
-    expect((await session2.postJson("/api/auth/sign-in/email", { email: farmerEmail.email, password: testPassword })).status).toBe(200);
+    expect(
+      (await session1.postJson("/api/auth/sign-in/email", { email: farmerEmail.email, password: testPassword })).status,
+    ).toBe(200);
+    expect(
+      (await session2.postJson("/api/auth/sign-in/email", { email: farmerEmail.email, password: testPassword })).status,
+    ).toBe(200);
 
     expect((await session1.postJson("/api/auth/update-user", { phoneNumber: nextTestPhone() })).status).toBe(400);
 
@@ -221,7 +244,9 @@ describe("P0.4 WhatsApp authentication, linking, recovery, and Fonnte failures",
 
     // Reset password via WhatsApp revokes BOTH session1 and session2
     await clearRateLimits();
-    expect((await session1.postJson("/api/auth/phone-number/request-password-reset", { phoneNumber: farmerPhone })).status).toBe(200);
+    expect(
+      (await session1.postJson("/api/auth/phone-number/request-password-reset", { phoneNumber: farmerPhone })).status,
+    ).toBe(200);
     const resetOtp = await getCapturedOtp(farmerPhone, "atur ulang kata sandi");
     const newPassword = "updated-password-2026";
     expect(
@@ -239,8 +264,14 @@ describe("P0.4 WhatsApp authentication, linking, recovery, and Fonnte failures",
     expect((await session2.get("/api/radar")).status).toBe(401);
 
     // Old password fails; new password signs in with original account ID
-    expect((await session1.postJson("/api/auth/sign-in/phone-number", { phoneNumber: farmerPhone, password: testPassword })).status).toBe(401);
-    expect((await session1.postJson("/api/auth/sign-in/phone-number", { phoneNumber: farmerPhone, password: newPassword })).status).toBe(200);
+    expect(
+      (await session1.postJson("/api/auth/sign-in/phone-number", { phoneNumber: farmerPhone, password: testPassword }))
+        .status,
+    ).toBe(401);
+    expect(
+      (await session1.postJson("/api/auth/sign-in/phone-number", { phoneNumber: farmerPhone, password: newPassword }))
+        .status,
+    ).toBe(200);
     expect(await (await session1.get("/api/session")).json()).toMatchObject({ id: farmerEmail.id, role: "farmer" });
   });
 

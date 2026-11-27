@@ -15,6 +15,7 @@ import {
 import {
   dashboardReturnPath,
   officerPath,
+  profilePath,
   radarPath,
   radarSection,
   radarSectionPath,
@@ -161,6 +162,7 @@ describe("domain boundaries and validation", () => {
     expect(signInFor("/radar?view=alerts")).toBe("/masuk?next=%2Fradar%3Fview%3Dalerts");
     expect(dashboardReturnPath(officerPath)).toBe(officerPath);
     expect(dashboardReturnPath(radarPath)).toBe(radarPath);
+    expect(dashboardReturnPath(profilePath)).toBe(profilePath);
     expect(dashboardReturnPath("/radar?view=alerts")).toBe("/radar?view=alerts");
     expect(dashboardReturnPath("https://evil.example/")).toBeUndefined();
     expect(dashboardReturnPath("//evil.example")).toBeUndefined();

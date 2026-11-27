@@ -26,7 +26,9 @@ let storage: OfflineDb | undefined;
 export function offlineDb() {
   if (!storage) {
     storage = new Dexie("vektor") as OfflineDb;
-    storage.version(1).stores({ queue: "id, ownerId", maps: "key", accounts: "key", snapshots: "key", sent: "id, ownerId" });
+    storage
+      .version(1)
+      .stores({ queue: "id, ownerId", maps: "key", accounts: "key", snapshots: "key", sent: "id, ownerId" });
   }
   return storage;
 }

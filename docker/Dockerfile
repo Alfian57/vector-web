@@ -15,6 +15,7 @@ COPY . .
 RUN bun run build
 
 ENV NODE_ENV=production
+RUN mkdir -p /app/uploads && chown node:node /app/uploads
 USER node
 EXPOSE 3000
 CMD ["bun", "run", "start", "--hostname", "0.0.0.0"]

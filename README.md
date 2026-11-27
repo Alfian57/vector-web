@@ -13,6 +13,12 @@ Gunakan Bun sesuai `package.json` dan Node.js 24.11 atau lebih baru pada seri 24
 5. Jalankan `bun run dev:all`. Perintah ini menyalakan PostGIS melalui Docker, menerapkan migrasi Prisma, lalu menjalankan Next.js dengan hot reload dan worker dalam satu terminal.
 6. Buka `http://localhost:3000/masuk`. Daftar sebagai petani dengan nomor WhatsApp dan kode yang diterima. Untuk mengaktifkan akses PPL, jalankan `bun --env-file=.env.local run officer:grant +6281234567890` dengan nomor yang sudah terverifikasi, lalu masuk kembali.
 
+### Format kode dan styling
+
+Tailwind CSS v4 diproses melalui plugin `@tailwindcss/postcss` di `postcss.config.mjs`. Semua layout, komponen dashboard, halaman Admin, halaman publik, dan popup peta memakai utility class Tailwind melalui pemetaan di `lib/tailwind`; helper `tw` mengubah nama kelas komponen menjadi utility Tailwind saat runtime. Variabel tema dan reset form bersama berada di `app/globals.css`. Aturan CSS komponen tersisa hanya untuk HTML artikel dan DOM editor Tiptap yang dibuat dinamis. Stylesheet MapLibre tetap diimpor sebagai stylesheet vendor.
+
+Jalankan `bun run format` untuk merapikan kode dan mengurutkan utility class, atau `bun run format:check` untuk memeriksa format tanpa mengubah file. Prettier dan plugin Tailwind hanya dependency development, jadi tidak menambah paket ke runtime aplikasi.
+
 Jalankan `bun run push:setup` untuk mengisi konfigurasi Web Push di `.env.local`, lalu mulai ulang Next.js dan worker. Perintah ini mempertahankan pasangan kunci yang sudah ada.
 
 Di mode development, PostGIS memakai kebijakan restart `no`: menyalakan Docker saja tidak otomatis menyalakan container database setelah laptop atau Docker dimatikan. `bun run dev:all` tetap menyalakannya saat diminta dan `Ctrl+C` menghentikan Next.js serta worker. Untuk menghentikan PostGIS sebelum selesai bekerja, jalankan `docker compose --env-file .env -p vektor-dev -f docker/compose.yaml -f docker/compose.dev.yaml stop db`. Data tetap tersimpan di volume Docker.
@@ -38,6 +44,8 @@ Setelah mengubah schema, jalankan `bun run db:generate` untuk memperbarui Prisma
 ### Data demo untuk presentasi
 
 Setelah PostGIS lokal berjalan dan migrasi selesai, jalankan `bun run db:seed`. Seeder host hanya berjalan pada database pengembangan VEKTOR. Seeder Compose memakai flag deployment eksplisit dan hanya membuat data demo pada host database `db` dalam jaringan Compose. Seeder dapat dijalankan ulang tanpa menambah duplikat laporan, artikel, akun, atau log demo.
+
+Tiga akun demo memiliki nomor WhatsApp unik yang ditandai terverifikasi untuk presentasi. Gambar sumber avatar berada di `public/demo-avatars`; seeder menyalin dan memproses semua avatar melalui pipeline yang sama dengan unggahan web, menyimpan avatar akun sebagai WebP privat di tabel avatar, dan menaruh salinan bernama ID akun serta `default.webp` di `uploads/avatars`. Compose memakai volume persisten `uploads` yang dipakai bersama oleh layanan seed dan app. `uploads/` adalah data runtime dan tidak dilacak Git; hanya sumber di `public/demo-avatars` yang dilacak.
 
 - Buka **Radar** untuk melihat dua klaster contoh, kondisi cuaca, dan tren empat minggu. Data laporan dan lokasi adalah ilustrasi presentasi.
 - Masuk sebagai `petani@gmail.com` untuk membuka petak pantauan, laporan dan foto, serta kotak masuk dengan pesan yang sudah dibaca dan belum dibaca.

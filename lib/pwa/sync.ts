@@ -13,7 +13,8 @@ export async function syncReports() {
     const claimed = await database.transaction("rw", database.queue, database.accounts, async () => {
       const latest = await database.queue.get(item.id);
       const active = await database.accounts.get("account");
-      if (active?.account.id !== owner || !latest || latest.error || (latest.claimedUntil ?? 0) > Date.now()) return false;
+      if (active?.account.id !== owner || !latest || latest.error || (latest.claimedUntil ?? 0) > Date.now())
+        return false;
       await database.queue.update(item.id, { claimedUntil: claim });
       return true;
     });
@@ -43,8 +44,10 @@ export async function syncReports() {
         break;
       } else if ([409, 413, 422].includes(response.status)) {
         const value: unknown = await response.json().catch(() => null);
-        const error = value && typeof value === "object" && "message" in value && typeof value.message === "string"
-          ? value.message : "Periksa kembali data laporan.";
+        const error =
+          value && typeof value === "object" && "message" in value && typeof value.message === "string"
+            ? value.message
+            : "Periksa kembali data laporan.";
         await database.queue.update(item.id, { error, claimedUntil: undefined });
       } else {
         throw new Error("Retryable report submission");

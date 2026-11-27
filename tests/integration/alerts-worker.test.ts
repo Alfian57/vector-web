@@ -45,9 +45,33 @@ describe("P1.6 broadcasts, inbox isolation, Web Push worker, and Open-Meteo weat
     const pJ1 = await districtOffsetPoint(jatisari, 0, 0);
 
     // Farmer in Cikampek owns TWO plots in Cikampek; must still receive only ONE inbox item per alert
-    expect((await farmerCikampek.postJson("/api/plots", { name: "Petak 1", longitude: pC1.longitude, latitude: pC1.latitude })).status).toBe(201);
-    expect((await farmerCikampek.postJson("/api/plots", { name: "Petak 2", longitude: pC2.longitude, latitude: pC2.latitude })).status).toBe(201);
-    expect((await farmerJatisari.postJson("/api/plots", { name: "Petak Jatisari", longitude: pJ1.longitude, latitude: pJ1.latitude })).status).toBe(201);
+    expect(
+      (
+        await farmerCikampek.postJson("/api/plots", {
+          name: "Petak 1",
+          longitude: pC1.longitude,
+          latitude: pC1.latitude,
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await farmerCikampek.postJson("/api/plots", {
+          name: "Petak 2",
+          longitude: pC2.longitude,
+          latitude: pC2.latitude,
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await farmerJatisari.postJson("/api/plots", {
+          name: "Petak Jatisari",
+          longitude: pJ1.longitude,
+          latitude: pJ1.latitude,
+        })
+      ).status,
+    ).toBe(201);
 
     const endpoint = `https://fcm.googleapis.com/fcm/send/${randomUUID()}`;
     expect(
@@ -57,7 +81,7 @@ describe("P1.6 broadcasts, inbox isolation, Web Push worker, and Open-Meteo weat
           keys: { p256dh: "a".repeat(87), auth: "b".repeat(22) },
         })
       ).status,
-    ).toBe(200);
+    ).toBe(201);
 
     const broadcastId = randomUUID();
     const payload = {
@@ -99,7 +123,15 @@ describe("P1.6 broadcasts, inbox isolation, Web Push worker, and Open-Meteo weat
 
   test("Web Push failures keep inbox messages intact, schedule backoff retries, and clean up 410 subscriptions", async () => {
     const pC = await districtOffsetPoint(cikampek, 0, 0);
-    expect((await farmerCikampek.postJson("/api/plots", { name: "Petak Push", longitude: pC.longitude, latitude: pC.latitude })).status).toBe(201);
+    expect(
+      (
+        await farmerCikampek.postJson("/api/plots", {
+          name: "Petak Push",
+          longitude: pC.longitude,
+          latitude: pC.latitude,
+        })
+      ).status,
+    ).toBe(201);
 
     const retryEndpoint = `https://fcm.googleapis.com/fcm/send/${randomUUID()}`;
     const goneEndpoint = `https://updates.push.services.mozilla.com/wpush/v2/${randomUUID()}`;
@@ -112,7 +144,7 @@ describe("P1.6 broadcasts, inbox isolation, Web Push worker, and Open-Meteo weat
             keys: { p256dh: "c".repeat(87), auth: "d".repeat(22) },
           })
         ).status,
-      ).toBe(200);
+      ).toBe(201);
     }
 
     expect(

@@ -1,9 +1,4 @@
-import {
-  configure,
-  getConsoleSink,
-  getLogger,
-  getJsonLinesFormatter,
-} from "@logtape/logtape";
+import { configure, getConsoleSink, getLogger, getJsonLinesFormatter } from "@logtape/logtape";
 import { db } from "./db";
 
 type SystemSource = "api" | "auth" | "worker" | "seed";

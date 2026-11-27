@@ -44,13 +44,24 @@ export async function recordPageView(account: Account | null, path: string) {
   const safePath = path.split("?")[0].slice(0, 160);
   try {
     const recent = await db().activityLog.findFirst({
-      where: { category: "page", action: "page.view", actorId: account.id, targetId: safePath, createdAt: { gte: new Date(Date.now() - 30_000) } },
+      where: {
+        category: "page",
+        action: "page.view",
+        actorId: account.id,
+        targetId: safePath,
+        createdAt: { gte: new Date(Date.now() - 30_000) },
+      },
       select: { id: true },
     });
-    if (!recent) await writeActivity({
-      category: "page", action: "page.view", actor: account, targetType: "page", targetId: safePath,
-      summary: `Membuka ${safePath}`,
-    });
+    if (!recent)
+      await writeActivity({
+        category: "page",
+        action: "page.view",
+        actor: account,
+        targetType: "page",
+        targetId: safePath,
+        summary: `Membuka ${safePath}`,
+      });
   } catch {
     console.error("VEKTOR audit event could not be persisted", "page", "page.view");
   }

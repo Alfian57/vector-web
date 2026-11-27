@@ -160,7 +160,15 @@ describe("service worker event handlers", () => {
 
     let closed = false;
     for (const listener of harness.listeners.get("notificationclick") ?? []) {
-      listener(makeWaitEvent({ notification: { close: () => { closed = true; } } }));
+      listener(
+        makeWaitEvent({
+          notification: {
+            close: () => {
+              closed = true;
+            },
+          },
+        }),
+      );
     }
     await Promise.all(waitUntilPromises.splice(0));
     expect(closed).toBe(true);

@@ -5,7 +5,12 @@ import { sendWhatsAppCode } from "../../lib/server/fonnte";
 type StubMode = "ok" | "status-false" | "http-500" | "invalid-json" | "redirect";
 
 let mode: StubMode = "ok";
-const captured: Array<{ auth: string | null; target: FormDataEntryValue | null; countryCode: FormDataEntryValue | null; message: FormDataEntryValue | null }> = [];
+const captured: Array<{
+  auth: string | null;
+  target: FormDataEntryValue | null;
+  countryCode: FormDataEntryValue | null;
+  message: FormDataEntryValue | null;
+}> = [];
 let server: ReturnType<typeof Bun.serve>;
 let previousAuthUrl: string | undefined;
 let previousFonnteUrl: string | undefined;
@@ -33,7 +38,8 @@ describe("Fonnte WhatsApp gateway", () => {
         });
         if (mode === "http-500") return Response.json({ status: true }, { status: 500 });
         if (mode === "invalid-json") return new Response("not-json", { status: 200 });
-        if (mode === "status-false") return Response.json({ status: false, reason: "device disconnected" }, { status: 200 });
+        if (mode === "status-false")
+          return Response.json({ status: false, reason: "device disconnected" }, { status: 200 });
         return Response.json({ status: true, detail: "sent" }, { status: 200 });
       },
     });

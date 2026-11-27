@@ -8,17 +8,23 @@ const legacyMigrations = [
 ] as const;
 
 const districtDataset = z.object({
-  features: z.array(z.object({
-    properties: z.object({ id: z.string(), name: z.string() }),
-    geometry: z.object({ type: z.literal("MultiPolygon"), coordinates: z.array(z.unknown()) }),
-  })).length(30),
+  features: z
+    .array(
+      z.object({
+        properties: z.object({ id: z.string(), name: z.string() }),
+        geometry: z.object({ type: z.literal("MultiPolygon"), coordinates: z.array(z.unknown()) }),
+      }),
+    )
+    .length(30),
 });
 
 async function migrate(...args: string[]) {
   const child = Bun.spawn(["bun", "run", "prisma", "migrate", ...args], {
-    stdin: "ignore", stdout: "inherit", stderr: "inherit",
+    stdin: "ignore",
+    stdout: "inherit",
+    stderr: "inherit",
   });
-  if (await child.exited !== 0) throw new Error(`Prisma migrate ${args[0]} failed`);
+  if ((await child.exited) !== 0) throw new Error(`Prisma migrate ${args[0]} failed`);
 }
 
 async function adoptLegacyMigrations(client: DatabaseTransaction) {
@@ -29,10 +35,12 @@ async function adoptLegacyMigrations(client: DatabaseTransaction) {
   if (!ledgers.legacy) return;
 
   const applied = new Set((await client.legacyMigration.findMany()).map(({ name }) => name));
-  const recorded = ledgers.prisma ? await client.$queryRaw<{ name: string }[]>`
+  const recorded = ledgers.prisma
+    ? await client.$queryRaw<{ name: string }[]>`
     SELECT migration_name AS name FROM _prisma_migrations
     WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL
-  ` : [];
+  `
+    : [];
   const baselined = new Set(recorded.map(({ name }) => name));
   for (const [name, migration] of legacyMigrations) {
     if (applied.has(name) && !baselined.has(migration)) await migrate("resolve", "--applied", migration);
@@ -42,11 +50,14 @@ async function adoptLegacyMigrations(client: DatabaseTransaction) {
 const prisma = db();
 try {
   // Serialize adoption and deployment, including when migrating from an older checkout.
-  await prisma.$transaction(async (client) => {
-    await client.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(280581)`;
-    await adoptLegacyMigrations(client);
-    await migrate("deploy");
-  }, { timeout: 120_000 });
+  await prisma.$transaction(
+    async (client) => {
+      await client.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(280581)`;
+      await adoptLegacyMigrations(client);
+      await migrate("deploy");
+    },
+    { timeout: 120_000 },
+  );
 
   const { features } = districtDataset.parse(await Bun.file("public/maps/karawang-districts.geojson").json());
   await transaction(async (client) => {

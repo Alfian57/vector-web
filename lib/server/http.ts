@@ -2,7 +2,10 @@ import { ZodError } from "zod";
 import { dependencyFailure } from "./dependencies";
 
 export class RequestError extends Error {
-  constructor(readonly status: number, message: string) {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
     super(message);
   }
 }

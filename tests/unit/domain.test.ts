@@ -28,16 +28,24 @@ describe("field reports", () => {
   });
 
   test("approval requires a finding and rejection requires a reason", () => {
-    expect(reviewInput.safeParse({ status: "verified", finding: "unknown", severity: "mild", note: "" }).success).toBe(false);
-    expect(reviewInput.safeParse({ status: "verified", finding: "blast", severity: "mild", note: "" }).success).toBe(true);
+    expect(reviewInput.safeParse({ status: "verified", finding: "unknown", severity: "mild", note: "" }).success).toBe(
+      false,
+    );
+    expect(reviewInput.safeParse({ status: "verified", finding: "blast", severity: "mild", note: "" }).success).toBe(
+      true,
+    );
     expect(reviewInput.safeParse({ status: "rejected", note: "  " }).success).toBe(false);
     expect(reviewInput.safeParse({ status: "rejected", note: "Foto tidak jelas" }).success).toBe(true);
   });
 
   test("push recipients must use supported HTTPS endpoints", () => {
     const keys = { p256dh: "a".repeat(87), auth: "a".repeat(22) };
-    expect(subscriptionInput.safeParse({ endpoint: "https://fcm.googleapis.com/fcm/send/123", keys }).success).toBe(true);
-    expect(subscriptionInput.safeParse({ endpoint: "https://fcm.googleapis.com.example.test/123", keys }).success).toBe(false);
+    expect(subscriptionInput.safeParse({ endpoint: "https://fcm.googleapis.com/fcm/send/123", keys }).success).toBe(
+      true,
+    );
+    expect(subscriptionInput.safeParse({ endpoint: "https://fcm.googleapis.com.example.test/123", keys }).success).toBe(
+      false,
+    );
     expect(subscriptionInput.safeParse({ endpoint: "http://127.0.0.1:3000/123", keys }).success).toBe(false);
   });
 });

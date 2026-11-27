@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import { RegisterServiceWorker } from "./_components/register-service-worker";
+import { tw } from "@/lib/tw";
 
 const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"], display: "swap" });
 
@@ -15,5 +16,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: "#143b2c" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
-  return <html lang="id" className={geist.variable}><body>{children}<RegisterServiceWorker /></body></html>;
+  return (
+    <html lang="id" className={tw(geist.variable)}>
+      <body>
+        {children}
+        <RegisterServiceWorker />
+      </body>
+    </html>
+  );
 }

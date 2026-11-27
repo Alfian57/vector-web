@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import sharp from "sharp";
 import { db } from "../../lib/server/db";
-import { clearRateLimits, createWhatsAppAccount, districtOffsetPoint, resetMutableState, TestSession } from "../integration/helpers/test-kit";
+import {
+  clearRateLimits,
+  createWhatsAppAccount,
+  districtOffsetPoint,
+  resetMutableState,
+  TestSession,
+} from "../integration/helpers/test-kit";
 
 test.afterAll(async () => {
   await db().$disconnect();
@@ -29,12 +35,7 @@ test("IndexedDB sync queue retains reports on connection failure, isolates accou
   const { execFileSync } = await import("node:child_process");
   const bundleCode = execFileSync(
     "bun",
-    [
-      "build",
-      "tests/integration/helpers/offline-harness-entry.ts",
-      "--target=browser",
-      "--format=esm",
-    ],
+    ["build", "tests/integration/helpers/offline-harness-entry.ts", "--target=browser", "--format=esm"],
     { encoding: "utf8" },
   );
 

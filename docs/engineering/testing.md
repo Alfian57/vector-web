@@ -34,6 +34,8 @@ Pelihara test regresi bermakna untuk perubahan perilaku. Laporkan hasil aktual d
 
 - Jika environment menghalangi tes, tulis command yang dicoba dan hambatan spesifiknya.
 
+Skrip `bun run test:integration` menjalankan database PostGIS dan server Next.js sementara pada port terpisah. Server Next.js memakai direktori build `.next-integration` agar dapat berjalan saat server development utama aktif; skrip menghapus direktori itu dan container saat selesai.
+
 
 ## Penerapan pada stack yang terdeteksi
 

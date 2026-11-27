@@ -2,7 +2,8 @@ import { chmod, readFile, writeFile } from "node:fs/promises";
 import { generateVAPIDKeys } from "web-push";
 
 const [filename = ".env.local", contact = "mailto:vektor@example.test"] = process.argv.slice(2);
-if (!/^mailto:[^\s@]+@[^\s@]+$/.test(contact)) throw new Error("Gunakan alamat kontak dalam format mailto:nama@domain.");
+if (!/^mailto:[^\s@]+@[^\s@]+$/.test(contact))
+  throw new Error("Gunakan alamat kontak dalam format mailto:nama@domain.");
 
 let contents = await readFile(filename, "utf8");
 
@@ -11,7 +12,10 @@ function variableLine(name: string) {
 }
 
 function readVariable(name: string) {
-  return contents.match(variableLine(name))?.[1].trim().replace(/^(["'])(.*)\1$/, "$2");
+  return contents
+    .match(variableLine(name))?.[1]
+    .trim()
+    .replace(/^(["'])(.*)\1$/, "$2");
 }
 
 function writeVariable(name: string, value: string) {
@@ -23,7 +27,8 @@ function writeVariable(name: string, value: string) {
 
 const publicKey = readVariable("VAPID_PUBLIC_KEY");
 const privateKey = readVariable("VAPID_PRIVATE_KEY");
-if (Boolean(publicKey) !== Boolean(privateKey)) throw new Error("Lengkapi pasangan kunci VAPID yang sudah ada di file env.");
+if (Boolean(publicKey) !== Boolean(privateKey))
+  throw new Error("Lengkapi pasangan kunci VAPID yang sudah ada di file env.");
 const subject = readVariable("VAPID_SUBJECT");
 if (publicKey && subject) {
   console.log(`Web Push sudah dikonfigurasi di ${filename}.`);

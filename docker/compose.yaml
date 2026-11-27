@@ -33,6 +33,8 @@ services:
     command: ["bun", "scripts/seed.ts", "--demo-deployment"]
     environment:
       VEKTOR_DEMO_DEPLOYMENT: "1"
+    volumes:
+      - uploads:/app/uploads
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -44,6 +46,8 @@ services:
         condition: service_completed_successfully
     ports:
       - "127.0.0.1:3000:3000"
+    volumes:
+      - uploads:/app/uploads
     restart: unless-stopped
   worker:
     <<: *app
@@ -54,3 +58,4 @@ services:
     restart: unless-stopped
 volumes:
   postgres:
+  uploads:

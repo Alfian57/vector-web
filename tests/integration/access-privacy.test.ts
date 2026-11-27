@@ -53,6 +53,7 @@ describe("P0.1 access control and cross-account privacy", () => {
     const protectedRequests: Array<() => Promise<Response>> = [
       () => visitor.get("/api/radar"),
       () => visitor.get("/api/weather"),
+      () => visitor.get("/api/search?q=petak"),
       () => visitor.get("/api/reports"),
       () => visitor.postJson("/api/reports", {}),
       () => visitor.get(`/api/reports/${sampleUuid}/photo`),
@@ -108,6 +109,37 @@ describe("P0.1 access control and cross-account privacy", () => {
     expect(createdReport.status).toBe(201);
     const { id: reportId } = (await createdReport.json()) as { id: string };
 
+    const savedFollowUp = await officer.putJson("/api/ppl/follow-ups", {
+      districtId: point.id,
+      kind: "outreach",
+      status: "complete",
+      note: "Catatan operasional PPL rahasia khusus",
+    });
+    expect(savedFollowUp.status).toBe(200);
+
+    const farmerSearchResponse = await farmerA.get("/api/search?q=rahasia%20Petani%20A");
+    const farmerSearch = (await farmerSearchResponse.json()) as { entries: { id: string; kind: string }[] };
+    expect(farmerSearch.entries).toContainEqual({ id: reportId, kind: "report" });
+    const otherFarmerSearchResponse = await farmerB.get("/api/search?q=rahasia%20Petani%20A");
+    const otherFarmerSearch = (await otherFarmerSearchResponse.json()) as { entries: { id: string; kind: string }[] };
+    expect(otherFarmerSearch.entries.filter((entry) => entry.kind === "report")).toEqual([]);
+    const officerReportSearchResponse = await officer.get("/api/search?q=rahasia%20Petani%20A");
+    const officerReportSearch = (await officerReportSearchResponse.json()) as {
+      entries: { id: string; kind: string }[];
+    };
+    expect(officerReportSearch.entries).toContainEqual({ id: reportId, kind: "report" });
+
+    const officerOperationsResponse = await officer.get("/api/search?q=Catatan%20operasional%20PPL%20rahasia%20khusus");
+    const officerOperationsSearch = (await officerOperationsResponse.json()) as {
+      entries: { id: string; kind: string }[];
+    };
+    expect(officerOperationsSearch.entries.some((entry) => entry.kind === "follow-up")).toBe(true);
+    const farmerOperationsResponse = await farmerA.get("/api/search?q=Catatan%20operasional%20PPL%20rahasia%20khusus");
+    const farmerOperationsSearch = (await farmerOperationsResponse.json()) as {
+      entries: { id: string; kind: string }[];
+    };
+    expect(farmerOperationsSearch.entries.some((entry) => entry.kind === "follow-up")).toBe(false);
+
     const createdPlot = await farmerA.postJson("/api/plots", {
       name: "Petak A",
       longitude: point.longitude,
@@ -117,6 +149,16 @@ describe("P0.1 access control and cross-account privacy", () => {
     const plotsA = (await (await farmerA.get("/api/plots")).json()) as { id: string; name: string }[];
     expect(plotsA).toHaveLength(1);
     const plotId = plotsA[0].id;
+
+    const plotSearchResponse = await farmerA.get("/api/search?q=Petak%20A");
+    const plotSearch = (await plotSearchResponse.json()) as { entries: { id: string; kind: string }[] };
+    expect(plotSearch.entries).toContainEqual({ id: plotId, kind: "plot" });
+    const otherPlotSearchResponse = await farmerB.get("/api/search?q=Petak%20A");
+    const otherPlotSearch = (await otherPlotSearchResponse.json()) as { entries: { id: string; kind: string }[] };
+    expect(otherPlotSearch.entries.filter((entry) => entry.kind === "plot")).toEqual([]);
+    const officerPlotSearchResponse = await officer.get("/api/search?q=Petak%20A");
+    const officerPlotSearch = (await officerPlotSearchResponse.json()) as { entries: { id: string; kind: string }[] };
+    expect(officerPlotSearch.entries.filter((entry) => entry.kind === "plot")).toEqual([]);
 
     // Farmer A can read own report & photo
     const listA = (await (await farmerA.get("/api/reports")).json()) as { reports: { id: string }[] };
@@ -151,7 +193,7 @@ describe("P0.1 access control and cross-account privacy", () => {
       endpoint,
       keys: { p256dh: "a".repeat(87), auth: "b".repeat(22) },
     });
-    expect(subRes.status).toBe(200);
+    expect(subRes.status).toBe(201);
     expect(await (await farmerA.postJson("/api/push/status", { endpoint })).json()).toEqual({ subscribed: true });
     expect(await (await farmerB.postJson("/api/push/status", { endpoint })).json()).toEqual({ subscribed: false });
     await farmerB.deleteJson("/api/push", { endpoint });
@@ -164,39 +206,59 @@ describe("P0.1 access control and cross-account privacy", () => {
 
     const pplRequestsForFarmer: Array<() => Promise<Response>> = [
       () => farmerA.get("/api/reports?scope=ppl"),
-      () => farmerA.patchJson(`/api/reports/${reportId}/review`, { status: "verified", finding: "blast", severity: "mild", note: "" }),
+      () =>
+        farmerA.patchJson(`/api/reports/${reportId}/review`, {
+          status: "verified",
+          finding: "blast",
+          severity: "mild",
+          note: "",
+        }),
       () => farmerA.get(`/api/reports/${reportId}/reviews`),
-      () => farmerA.patchJson(`/api/reports/${reportId}/reviews`, {
-        status: "rejected",
-        revision: 1,
-        note: "Tolak",
-        reason: "Cek",
-      }),
+      () =>
+        farmerA.patchJson(`/api/reports/${reportId}/reviews`, {
+          status: "rejected",
+          revision: 1,
+          note: "Tolak",
+          reason: "Cek",
+        }),
       () => farmerA.get("/api/ppl/events"),
       () => farmerA.postJson("/api/ppl/broadcasts", { districtId: point.id, title: "Uji", body: "Isi" }),
       () => farmerA.get("/api/ppl/follow-ups"),
-      () => farmerA.putJson("/api/ppl/follow-ups", { districtId: point.id, kind: "outreach", status: "planned", note: "Uji" }),
+      () =>
+        farmerA.putJson("/api/ppl/follow-ups", {
+          districtId: point.id,
+          kind: "outreach",
+          status: "planned",
+          note: "Uji",
+        }),
       () => farmerA.get("/api/ppl/follow-ups/history"),
       () => farmerA.get("/api/ppl/aid-allocations"),
-      () => farmerA.postJson("/api/ppl/aid-allocations", {
-        id: randomUUID(),
-        districtId: point.id,
-        item: "Pupuk",
-        quantity: 5,
-        unit: "sak",
-      }),
+      () =>
+        farmerA.postJson("/api/ppl/aid-allocations", {
+          id: randomUUID(),
+          districtId: point.id,
+          item: "Pupuk",
+          quantity: 5,
+          unit: "sak",
+        }),
       () => farmerA.get(`/api/ppl/aid-allocations/${sampleUuid}`),
-      () => farmerA.postJson(`/api/ppl/aid-allocations/${sampleUuid}`, { id: randomUUID(), recipient: "Poktan", quantity: 1 }),
-      () => farmerA.patchJson(`/api/ppl/aid-allocations/${sampleUuid}`, {
-        target: "allocation",
-        revision: 0,
-        reason: "Uji",
-        districtId: point.id,
-        item: "Pupuk",
-        quantity: 6,
-        unit: "sak",
-        note: "",
-      }),
+      () =>
+        farmerA.postJson(`/api/ppl/aid-allocations/${sampleUuid}`, {
+          id: randomUUID(),
+          recipient: "Poktan",
+          quantity: 1,
+        }),
+      () =>
+        farmerA.patchJson(`/api/ppl/aid-allocations/${sampleUuid}`, {
+          target: "allocation",
+          revision: 0,
+          reason: "Uji",
+          districtId: point.id,
+          item: "Pupuk",
+          quantity: 6,
+          unit: "sak",
+          note: "",
+        }),
     ];
 
     for (const invoke of pplRequestsForFarmer) {
@@ -216,7 +278,7 @@ describe("P0.1 access control and cross-account privacy", () => {
 
     const queueRes = await officer.get("/api/reports?scope=ppl");
     expect(queueRes.status).toBe(200);
-    expect((await queueRes.json() as { reports: { id: string }[] }).reports.map((r) => r.id)).toContain(reportId);
+    expect(((await queueRes.json()) as { reports: { id: string }[] }).reports.map((r) => r.id)).toContain(reportId);
     expect((await officer.get(`/api/reports/${reportId}/photo`)).status).toBe(200);
 
     // Radar snapshot never leaks private coordinates, ownerId, or report notes

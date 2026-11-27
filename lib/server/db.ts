@@ -8,10 +8,10 @@ export function db() {
   const connectionString = process.env.DATABASE_URL?.trim();
   if (!connectionString) throw new DatabaseNotConfigured("DATABASE_URL is required");
 
-  return shared.vektorPrisma ??= new PrismaClient({
+  return (shared.vektorPrisma ??= new PrismaClient({
     adapter: new PrismaPg({ connectionString, max: 12, connectionTimeoutMillis: 3000 }),
     transactionOptions: { maxWait: 3000, timeout: 15_000 },
-  });
+  }));
 }
 
 export type DatabaseTransaction = Prisma.TransactionClient;

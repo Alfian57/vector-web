@@ -94,6 +94,7 @@ describe("P1.7 database migrations, legacy upgrade, and demo seed guard", () => 
         "004_prisma_adoption",
         "005_whatsapp_accounts",
         "006_education_admin_logs",
+        "007_user_avatars",
       ]);
 
       const postgisCols = await fresh.$queryRaw<{ table_name: string; column_name: string; udt_name: string }[]>`
@@ -128,7 +129,10 @@ describe("P1.7 database migrations, legacy upgrade, and demo seed guard", () => 
     const legacyAlertId = randomUUID();
 
     try {
-      for (const file of ["prisma/migrations/001_pilot/migration.sql", "prisma/migrations/002_aid_allocations/migration.sql"]) {
+      for (const file of [
+        "prisma/migrations/001_pilot/migration.sql",
+        "prisma/migrations/002_aid_allocations/migration.sql",
+      ]) {
         const sql = readFileSync(file, "utf8");
         for (const stmt of splitSqlStatements(sql)) {
           await legacy.$executeRawUnsafe(stmt);
@@ -137,7 +141,9 @@ describe("P1.7 database migrations, legacy upgrade, and demo seed guard", () => 
 
       // Legacy migration ledger recording 001 & 002 before Prisma adoption
       await legacy.$executeRawUnsafe(`CREATE TABLE schema_migrations (name text PRIMARY KEY)`);
-      await legacy.$executeRawUnsafe(`INSERT INTO schema_migrations (name) VALUES ('001-pilot.sql'), ('002-aid-allocations.sql')`);
+      await legacy.$executeRawUnsafe(
+        `INSERT INTO schema_migrations (name) VALUES ('001-pilot.sql'), ('002-aid-allocations.sql')`,
+      );
 
       // Seed representative legacy data on old schema
       await legacy.$executeRaw`
@@ -191,6 +197,7 @@ describe("P1.7 database migrations, legacy upgrade, and demo seed guard", () => 
         "004_prisma_adoption",
         "005_whatsapp_accounts",
         "006_education_admin_logs",
+        "007_user_avatars",
       ]);
 
       // Verify legacy data preserved and backfilled cleanly
@@ -256,9 +263,19 @@ describe("P1.7 database migrations, legacy upgrade, and demo seed guard", () => 
         throw new Error("VEKTOR_SEED_TEST_URL must target isolated :5433/vektor");
       }
       await runMigrateScript(seedUrl);
-      const first = await runSeedScript({ DATABASE_URL: seedUrl, NODE_ENV: "test", VEKTOR_SEED_TEST_ISOLATED: "1", VEKTOR_SEED_TEST_URL: seedUrl });
+      const first = await runSeedScript({
+        DATABASE_URL: seedUrl,
+        NODE_ENV: "test",
+        VEKTOR_SEED_TEST_ISOLATED: "1",
+        VEKTOR_SEED_TEST_URL: seedUrl,
+      });
       expect(first.exitCode).toBe(0);
-      const second = await runSeedScript({ DATABASE_URL: seedUrl, NODE_ENV: "test", VEKTOR_SEED_TEST_ISOLATED: "1", VEKTOR_SEED_TEST_URL: seedUrl });
+      const second = await runSeedScript({
+        DATABASE_URL: seedUrl,
+        NODE_ENV: "test",
+        VEKTOR_SEED_TEST_ISOLATED: "1",
+        VEKTOR_SEED_TEST_URL: seedUrl,
+      });
       expect(second.exitCode).toBe(0);
 
       const seeded = makeClient(seedUrl);
@@ -266,7 +283,9 @@ describe("P1.7 database migrations, legacy upgrade, and demo seed guard", () => 
         expect(await seeded.user.count()).toBe(3);
         const roles = await seeded.user.groupBy({ by: ["role"], _count: { _all: true } });
         expect(roles.map((row) => [row.role, row._count._all]).sort()).toEqual([
-          ["admin", 1], ["farmer", 1], ["officer", 1],
+          ["admin", 1],
+          ["farmer", 1],
+          ["officer", 1],
         ]);
         expect(await seeded.educationArticle.count()).toBe(3);
         expect(await seeded.report.count()).toBe(27);

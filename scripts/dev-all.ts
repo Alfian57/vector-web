@@ -5,7 +5,10 @@ const resolve = createRequire(import.meta.url).resolve;
 const shutdown = new AbortController();
 const processes: Promise<number>[] = [];
 
-for (const [signal, exitCode] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
+for (const [signal, exitCode] of [
+  ["SIGINT", 130],
+  ["SIGTERM", 143],
+] as const) {
   process.once(signal, () => {
     process.exitCode = exitCode;
     shutdown.abort();
@@ -24,7 +27,7 @@ function run(command: string[]) {
 }
 
 async function startDevelopment() {
-  if (!await Bun.file(".env").exists() || !await Bun.file(".env.local").exists()) {
+  if (!(await Bun.file(".env").exists()) || !(await Bun.file(".env.local").exists())) {
     throw new Error("Siapkan .env dan .env.local sesuai README sebelum menjalankan dev:all.");
   }
   const database = URL.parse(process.env.DATABASE_URL ?? "");
@@ -37,9 +40,20 @@ async function startDevelopment() {
     {
       name: "Menyalakan PostGIS",
       command: [
-        "docker", "compose", "--env-file", ".env", "-p", "vektor-dev",
-        "-f", "docker/compose.yaml", "-f", "docker/compose.dev.yaml",
-        "up", "-d", "--wait", "db",
+        "docker",
+        "compose",
+        "--env-file",
+        ".env",
+        "-p",
+        "vektor-dev",
+        "-f",
+        "docker/compose.yaml",
+        "-f",
+        "docker/compose.dev.yaml",
+        "up",
+        "-d",
+        "--wait",
+        "db",
       ],
     },
     {

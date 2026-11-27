@@ -9,8 +9,15 @@ function gateway() {
   if (!testUrl) return { url: endpoint, token: process.env.FONNTE_TOKEN?.trim() };
   const app = URL.parse(process.env.BETTER_AUTH_URL ?? "");
   const url = URL.parse(testUrl);
-  if (app && loopback.has(app.hostname) && url?.protocol === "http:" && loopback.has(url.hostname) &&
-    !url.username && !url.password) return { url: url.href, token: "vektor-e2e" };
+  if (
+    app &&
+    loopback.has(app.hostname) &&
+    url?.protocol === "http:" &&
+    loopback.has(url.hostname) &&
+    !url.username &&
+    !url.password
+  )
+    return { url: url.href, token: "vektor-e2e" };
   return null;
 }
 
@@ -26,7 +33,10 @@ export async function sendWhatsAppCode(
   const form = new FormData();
   form.set("target", phoneNumber.slice(1));
   form.set("countryCode", "0");
-  form.set("message", `Kode VEKTOR untuk ${action}: ${code}. Berlaku ${whatsappOtpExpiry / 60} menit. Jangan bagikan kode ini.`);
+  form.set(
+    "message",
+    `Kode VEKTOR untuk ${action}: ${code}. Berlaku ${whatsappOtpExpiry / 60} menit. Jangan bagikan kode ini.`,
+  );
   try {
     const response = await fetch(config.url, {
       method: "POST",

@@ -1,6 +1,16 @@
 import { createHash } from "node:crypto";
 import sharp from "sharp";
-import { findLabel, maxPhotoBytes, reportInput, type Account, type Position, type Report, type ReviewCorrection, type ReviewEntry, type ReviewInput } from "@/lib/domain";
+import {
+  findLabel,
+  maxPhotoBytes,
+  reportInput,
+  type Account,
+  type Position,
+  type Report,
+  type ReviewCorrection,
+  type ReviewEntry,
+  type ReviewInput,
+} from "@/lib/domain";
 import { Prisma } from "../../generated/prisma/client";
 import { db, transaction, type DatabaseTransaction } from "./db";
 import { RequestError } from "./http";
@@ -25,9 +35,13 @@ export async function listReports(account: Account, params: URLSearchParams, sta
   const status = params.get("status");
   const finding = params.get("finding");
   const page = Number(params.get("page") ?? "0");
-  if (!Number.isInteger(page) || page < 0 || page > 10000 ||
+  if (
+    !Number.isInteger(page) ||
+    page < 0 ||
+    page > 10000 ||
     (status && !["pending", "verified", "rejected"].includes(status)) ||
-    (finding && !findLabel.safeParse(finding).success)) {
+    (finding && !findLabel.safeParse(finding).success)
+  ) {
     throw new RequestError(422, "Filter laporan tidak valid.");
   }
   const rows = await db().$queryRaw<Report[]>`
@@ -80,9 +94,12 @@ export async function createReport(request: Request, owner: Account) {
   if (!metadata || !["jpeg", "png", "webp"].includes(metadata.format ?? "")) {
     throw new RequestError(422, "Gunakan foto JPEG, PNG, atau WebP.");
   }
-  const jpeg = await processor.rotate()
+  const jpeg = await processor
+    .rotate()
     .resize(1280, 1280, { fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 77 }).toBuffer().catch(() => null);
+    .jpeg({ quality: 77 })
+    .toBuffer()
+    .catch(() => null);
   if (!jpeg || jpeg.byteLength > maxPhotoBytes) throw new RequestError(422, "Foto tidak dapat diproses.");
 
   return transaction(async (client) => {
@@ -115,7 +132,11 @@ export async function reportPhoto(account: Account, id: string) {
   });
   if (!row) throw new RequestError(404, "Foto tidak ditemukan.");
   return new Response(new Uint8Array(row.image), {
-    headers: { "Content-Type": "image/jpeg", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" },
+    headers: {
+      "Content-Type": "image/jpeg",
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
   });
 }
 
@@ -141,13 +162,16 @@ export async function reviewReport(id: string, reviewer: Account, review: Review
         AND ((${revision}::int IS NULL AND status = 'pending') OR (status <> 'pending' AND review_revision = ${revision}::int))
     `;
     if (!count) {
-      if (!await client.report.count({ where: { id } })) throw new RequestError(404, "Laporan tidak ditemukan.");
-      throw new RequestError(409, revision === null ? "Laporan sudah ditinjau." : "Keputusan laporan sudah berubah. Buka kembali detail terbaru.");
+      if (!(await client.report.count({ where: { id } }))) throw new RequestError(404, "Laporan tidak ditemukan.");
+      throw new RequestError(
+        409,
+        revision === null ? "Laporan sudah ditinjau." : "Keputusan laporan sudah berubah. Buka kembali detail terbaru.",
+      );
     }
     await client.$executeRaw`
       INSERT INTO report_review_history (report_id, revision, status, finding, severity, note, reason, reviewer_id, recorded_at)
       SELECT id, review_revision, status, finding, severity, review_note, ${"reason" in review ? review.reason : null}, reviewer_id, reviewed_at FROM reports WHERE id = ${id}::uuid
     `;
-    if (!await recomputeRadar(client, { corrected: revision !== null })) await bumpRevision(client);
+    if (!(await recomputeRadar(client, { corrected: revision !== null }))) await bumpRevision(client);
   });
 }

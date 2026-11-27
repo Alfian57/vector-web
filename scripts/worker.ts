@@ -16,15 +16,17 @@ try {
       ["radar", () => transaction(recomputeRadar)],
       ["push", deliverPush],
     ];
-    await Promise.all(jobs.map(async ([job, run]) => {
-      try {
-        await run();
-        await updateWorkerStatus(job);
-      } catch {
-        console.error(`VEKTOR worker: ${job} failed`);
-        await updateWorkerStatus(job, "job_failed").catch(() => {});
-      }
-    }));
+    await Promise.all(
+      jobs.map(async ([job, run]) => {
+        try {
+          await run();
+          await updateWorkerStatus(job);
+        } catch {
+          console.error(`VEKTOR worker: ${job} failed`);
+          await updateWorkerStatus(job, "job_failed").catch(() => {});
+        }
+      }),
+    );
     const pruneDay = new Date().toISOString().slice(0, 10);
     if (lastPruneDay !== pruneDay) {
       try {

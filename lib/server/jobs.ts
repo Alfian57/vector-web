@@ -63,15 +63,11 @@ export async function deliverPush(send = sendNotification) {
       if (!job) return false;
 
       try {
-        await send(
-          { endpoint: job.endpoint, keys: job.keys },
-          JSON.stringify({ id: job.alert_id }),
-          {
-            vapidDetails,
-            TTL: 86400,
-            timeout: 5000,
-          },
-        );
+        await send({ endpoint: job.endpoint, keys: job.keys }, JSON.stringify({ id: job.alert_id }), {
+          vapidDetails,
+          TTL: 86400,
+          timeout: 5000,
+        });
         await client.$executeRaw`UPDATE push_jobs SET done_at = now() WHERE alert_id = ${job.alert_id}::uuid AND endpoint = ${job.endpoint}`;
       } catch (error) {
         const status = error instanceof WebPushError ? error.statusCode : 0;

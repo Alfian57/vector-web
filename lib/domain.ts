@@ -80,16 +80,26 @@ export const aidDeliveryInput = z.object({
 });
 export const aidCorrectionInput = z.discriminatedUnion("target", [
   correction.extend(aidAllocationInput.omit({ id: true }).shape).extend({ target: z.literal("allocation") }),
-  correction.extend(aidDeliveryInput.omit({ id: true }).shape).extend({ target: z.literal("delivery"), deliveryId: uuid }),
+  correction
+    .extend(aidDeliveryInput.omit({ id: true }).shape)
+    .extend({ target: z.literal("delivery"), deliveryId: uuid }),
   correction.extend({ target: z.literal("void-delivery"), deliveryId: uuid }),
 ]);
 export const subscriptionInput = z.object({
-  endpoint: z.url().max(2048).refine((value) => {
-    const url = new URL(value);
-    return url.protocol === "https:" && !url.username && !url.password && !url.port &&
-      (["fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com"].includes(url.hostname) ||
-        url.hostname.endsWith(".push.apple.com"));
-  }, "Layanan push perangkat ini belum didukung."),
+  endpoint: z
+    .url()
+    .max(2048)
+    .refine((value) => {
+      const url = new URL(value);
+      return (
+        url.protocol === "https:" &&
+        !url.username &&
+        !url.password &&
+        !url.port &&
+        (["fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com"].includes(url.hostname) ||
+          url.hostname.endsWith(".push.apple.com"))
+      );
+    }, "Layanan push perangkat ini belum didukung."),
   keys: z.object({
     p256dh: z.string().regex(/^[\w-]{87}$/),
     auth: z.string().regex(/^[\w-]{22}$/),
@@ -102,7 +112,14 @@ export type ReportInput = z.infer<typeof reportInput>;
 export type ReviewInput = z.infer<typeof reviewInput>;
 export type ReviewCorrection = z.infer<typeof reviewCorrectionInput>;
 export type AccountRole = "farmer" | "officer" | "admin";
-export type Account = { id: string; name: string; role: AccountRole; whatsappLinked?: boolean };
+export type Account = { id: string; name: string; role: AccountRole; whatsappLinked?: boolean; image?: string | null };
+export type AccountProfile = {
+  name: string;
+  role: AccountRole;
+  email: string | null;
+  phoneNumber: string | null;
+  image: string | null;
+};
 export type EducationStatus = "draft" | "published" | "archived";
 export type EducationArticle = {
   id: string;
@@ -133,6 +150,7 @@ export type ActivityLog = {
   createdAt: string;
 };
 export type AdminOverview = {
+  asOf: string;
   accounts: { total: number; banned: number; farmers: number; officers: number; admins: number };
   reports: { pending: number; verified: number; rejected: number };
   education: { draft: number; published: number };
@@ -140,6 +158,20 @@ export type AdminOverview = {
   push: { pending: number; failed: number };
   weatherFetchedAt: string | null;
 };
+export type AdminSearchResults = {
+  accounts: Array<{ id: string; name: string; email: string; role: AccountRole; banned: boolean }>;
+  education: Array<{ id: string; title: string; category: string; status: EducationStatus }>;
+  logs: Array<{ id: string; action: string; category: string; summary: string; createdAt: string }>;
+};
+export type DashboardSearchKind = "report" | "plot" | "alert" | "follow-up" | "aid-allocation" | "education";
+export type DashboardSearchEntry = {
+  id: string;
+  kind: DashboardSearchKind;
+  label: string;
+  description: string;
+  href: string;
+};
+export type DashboardSearchResponse = { entries: DashboardSearchEntry[] };
 export type Report = ReportInput & {
   status: keyof typeof statuses;
   severity: keyof typeof severities | null;
@@ -159,13 +191,19 @@ export type FollowUp = z.infer<typeof followUpInput> & { updatedAt: string; dist
 export type FollowUpEntry = FollowUp & { id: string; author: string };
 export type Page<T> = { entries: T[]; hasMore: boolean };
 export type District = { id: string; name: string };
-export type AidAllocation = z.infer<typeof aidAllocationInput> & { districtName: string; deliveredQuantity: number; revision: number };
+export type AidAllocation = z.infer<typeof aidAllocationInput> & {
+  districtName: string;
+  deliveredQuantity: number;
+  revision: number;
+};
 export type AidDelivery = z.infer<typeof aidDeliveryInput> & { recordedAt: string; revision: number; voided: boolean };
 export type AidCorrection = {
   id: string;
   kind: z.infer<typeof aidCorrectionInput>["target"];
   reason: string;
-  previous: Pick<AidAllocation, "districtName" | "item" | "quantity" | "unit" | "note"> | Pick<AidDelivery, "recipient" | "quantity" | "note" | "voided">;
+  previous:
+    | Pick<AidAllocation, "districtName" | "item" | "quantity" | "unit" | "note">
+    | Pick<AidDelivery, "recipient" | "quantity" | "note" | "voided">;
   current: AidCorrection["previous"];
   author: string;
   recordedAt: string;
@@ -181,10 +219,19 @@ export type DistrictSummary = {
 };
 export type ObservedWeek = { startOn: string; endOn: string; count: number };
 export type RadarSnapshot = { updatedAt: string; summaries: DistrictSummary[]; trend?: ObservedWeek[] };
-export type Weather = { observedAt: string; fetchedAt: string; windSpeed: number; windDirection: number; humidity: number };
+export type Weather = {
+  observedAt: string;
+  fetchedAt: string;
+  windSpeed: number;
+  windDirection: number;
+  humidity: number;
+};
 export type MapPackage = { url: string; version: string; bytes: number; mapTilerKey?: string };
 export const mapCenter: [number, number] = [107.34, -6.28];
-export const mapBounds: [[number, number], [number, number]] = [[106.97, -6.63], [107.74, -5.85]];
+export const mapBounds: [[number, number], [number, number]] = [
+  [106.97, -6.63],
+  [107.74, -5.85],
+];
 export const districtPath = "/maps/karawang-districts.geojson";
 export const maxPhotoBytes = 1_500_000;
 

@@ -10,7 +10,20 @@ import { sendWhatsAppCode } from "./fonnte";
 import { whatsappAccounts } from "./whatsapp-accounts";
 
 const adminAccess = createAccessControl({
-  user: ["create", "list", "set-role", "ban", "impersonate", "impersonate-admins", "delete", "set-password", "set-email", "set-phone", "get", "update"],
+  user: [
+    "create",
+    "list",
+    "set-role",
+    "ban",
+    "impersonate",
+    "impersonate-admins",
+    "delete",
+    "set-password",
+    "set-email",
+    "set-phone",
+    "get",
+    "update",
+  ],
   session: ["list", "revoke", "delete"],
 });
 const regularRole = adminAccess.newRole({ user: [], session: [] });
@@ -20,7 +33,9 @@ async function consumeCode(phoneNumber: string, code: string): Promise<void> {
     await getAuth().api.consumePhoneNumberOTP({ body: { phoneNumber, code } });
   } catch (error) {
     if (error instanceof APIError && (error.statusCode === 400 || error.statusCode === 403)) {
-      throw APIError.fromStatus("BAD_REQUEST", { message: "Kode salah atau kedaluwarsa. Periksa kode atau minta kode baru." });
+      throw APIError.fromStatus("BAD_REQUEST", {
+        message: "Kode salah atau kedaluwarsa. Periksa kode atau minta kode baru.",
+      });
     }
     throw error;
   }
@@ -31,7 +46,13 @@ function makeAuth() {
     baseURL: process.env.BETTER_AUTH_URL,
     secret: process.env.BETTER_AUTH_SECRET,
     database: prismaAdapter(db(), { provider: "postgresql", transaction: true }),
-    disabledPaths: ["/sign-up/email", "/send-verification-email", "/request-password-reset", "/reset-password", "/phone-number/verify"],
+    disabledPaths: [
+      "/sign-up/email",
+      "/send-verification-email",
+      "/request-password-reset",
+      "/reset-password",
+      "/phone-number/verify",
+    ],
     rateLimit: {
       enabled: true,
       storage: "database",
@@ -81,8 +102,8 @@ export async function getAccount(headers: Headers): Promise<Account | null> {
   const session = await getAuth().api.getSession({ headers });
   const user = session?.user;
   if (!user || user.banned || (!user.emailVerified && !user.phoneNumberVerified)) return null;
-  const role: AccountRole | null = user.role === "admin" || user.role === "officer" || user.role === "farmer"
-    ? user.role : null;
+  const role: AccountRole | null =
+    user.role === "admin" || user.role === "officer" || user.role === "farmer" ? user.role : null;
   if (!role) return null;
 
   return {
@@ -90,5 +111,6 @@ export async function getAccount(headers: Headers): Promise<Account | null> {
     name: user.name,
     role,
     whatsappLinked: user.phoneNumberVerified === true,
+    image: user.image ?? null,
   };
 }

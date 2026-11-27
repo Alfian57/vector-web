@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/.next-integration/
 /out/
 
 # production
@@ -42,6 +43,7 @@ next-env.d.ts
 
 # VEKTOR generated files
 /generated/prisma/
+/uploads/
 /public/sw.js
 /public/sw-dev.js
 /public/maplibre-worker.mjs

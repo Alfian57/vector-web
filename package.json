@@ -20,7 +20,9 @@
     "db:seed": "bun --env-file=.env.local run prisma db seed",
     "officer:grant": "bun scripts/officer.ts",
     "push:setup": "bun scripts/configure-push.ts",
-    "worker": "bun scripts/worker.ts"
+    "worker": "bun scripts/worker.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@logtape/logtape": "^2.4.3",
@@ -42,13 +44,14 @@
     "pmtiles": "^4.5.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "react-easy-crop": "^6.2.5",
     "sharp": "^0.35.5",
     "web-push": "^4.0.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",
-    "@tailwindcss/turbopack": "4.3.3",
+    "@tailwindcss/postcss": "4.3.3",
     "@types/bun": "^1.4.5",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -56,6 +59,8 @@
     "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
+    "prettier": "^3.10.1",
+    "prettier-plugin-tailwindcss": "^0.8.1",
     "prisma": "7.10.1",
     "tailwindcss": "4.3.3",
     "typescript": "^5"

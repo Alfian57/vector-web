@@ -234,9 +234,9 @@ describe("P1.5 aid allocations, deliveries, concurrency, corrections, and idempo
       ).status,
     ).toBe(201);
 
-    const corrections = (
-      await (await officer.get(`/api/ppl/aid-allocations/${allocationId}?history=corrections`)).json()
-    ) as Page<AidCorrection>;
+    const corrections = (await (
+      await officer.get(`/api/ppl/aid-allocations/${allocationId}?history=corrections`)
+    ).json()) as Page<AidCorrection>;
     expect(corrections.entries).toMatchObject([
       { kind: "void-delivery", reason: "Salah penerima", current: { voided: true } },
       { kind: "delivery", reason: "Berita acara direvisi", previous: { quantity: 8 }, current: { quantity: 5 } },

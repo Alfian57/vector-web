@@ -40,9 +40,22 @@ describe("P0.3 report verification, PostGIS clustering, and radar trends", () =>
     const photo = await makeJpeg();
 
     // Register farmer plot in Cikampek for alert checks later
-    expect((await farmer.postJson("/api/plots", { name: "Petak Cikampek", longitude: pCikampek.longitude, latitude: pCikampek.latitude })).status).toBe(201);
+    expect(
+      (
+        await farmer.postJson("/api/plots", {
+          name: "Petak Cikampek",
+          longitude: pCikampek.longitude,
+          latitude: pCikampek.latitude,
+        })
+      ).status,
+    ).toBe(201);
 
-    const create = async (longitude: number, latitude: number, finding: string, observedAt = new Date(Date.now() - 5000).toISOString()) => {
+    const create = async (
+      longitude: number,
+      latitude: number,
+      finding: string,
+      observedAt = new Date(Date.now() - 5000).toISOString(),
+    ) => {
       const res = await submitReport(farmer, farmerAccount.id, { longitude, latitude, finding, observedAt, photo });
       expect(res.status).toBe(201);
       return ((await res.json()) as { id: string }).id;
@@ -62,14 +75,61 @@ describe("P0.3 report verification, PostGIS clustering, and radar trends", () =>
     );
 
     // Reject one
-    expect((await officer.patchJson(`/api/reports/${rejectedId}/review`, { status: "rejected", note: "Foto buram" })).status).toBe(200);
+    expect(
+      (await officer.patchJson(`/api/reports/${rejectedId}/review`, { status: "rejected", note: "Foto buram" })).status,
+    ).toBe(200);
     // Verifying with finding="unknown" must fail 422
-    expect((await officer.patchJson(`/api/reports/${verifiedUnknownAttempt}/review`, { status: "verified", finding: "unknown", severity: "mild", note: "" })).status).toBe(422);
+    expect(
+      (
+        await officer.patchJson(`/api/reports/${verifiedUnknownAttempt}/review`, {
+          status: "verified",
+          finding: "unknown",
+          severity: "mild",
+          note: "",
+        })
+      ).status,
+    ).toBe(422);
     // Verify healthy, recent blast, Jatisari tungro, old blast
-    expect((await officer.patchJson(`/api/reports/${healthyId}/review`, { status: "verified", finding: "healthy", severity: "mild", note: "" })).status).toBe(200);
-    expect((await officer.patchJson(`/api/reports/${verifiedBlastRecent}/review`, { status: "verified", finding: "blast", severity: "mild", note: "" })).status).toBe(200);
-    expect((await officer.patchJson(`/api/reports/${verifiedTungroJatisari}/review`, { status: "verified", finding: "tungro", severity: "moderate", note: "" })).status).toBe(200);
-    expect((await officer.patchJson(`/api/reports/${verifiedOldBlast}/review`, { status: "verified", finding: "blast", severity: "mild", note: "" })).status).toBe(200);
+    expect(
+      (
+        await officer.patchJson(`/api/reports/${healthyId}/review`, {
+          status: "verified",
+          finding: "healthy",
+          severity: "mild",
+          note: "",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await officer.patchJson(`/api/reports/${verifiedBlastRecent}/review`, {
+          status: "verified",
+          finding: "blast",
+          severity: "mild",
+          note: "",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await officer.patchJson(`/api/reports/${verifiedTungroJatisari}/review`, {
+          status: "verified",
+          finding: "tungro",
+          severity: "moderate",
+          note: "",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await officer.patchJson(`/api/reports/${verifiedOldBlast}/review`, {
+          status: "verified",
+          finding: "blast",
+          severity: "mild",
+          note: "",
+        })
+      ).status,
+    ).toBe(200);
 
     // Radar summary contains only verified non-healthy/non-unknown reports within last 7 days
     const radar = (await (await farmer.get("/api/radar")).json()) as RadarSnapshot;
@@ -81,16 +141,26 @@ describe("P0.3 report verification, PostGIS clustering, and radar trends", () =>
     expect(radar.trend?.reduce((sum, w) => sum + w.count, 0)).toBe(3);
 
     // PPL queue filter checks
-    const pendingList = (await (await officer.get("/api/reports?scope=ppl&status=pending")).json()) as { reports: Report[] };
+    const pendingList = (await (await officer.get("/api/reports?scope=ppl&status=pending")).json()) as {
+      reports: Report[];
+    };
     expect(pendingList.reports.map((r) => r.id).sort()).toEqual([pendingId, verifiedUnknownAttempt].sort());
 
-    const verifiedTungroList = (await (await officer.get("/api/reports?scope=ppl&status=verified&finding=tungro")).json()) as {
+    const verifiedTungroList = (await (
+      await officer.get("/api/reports?scope=ppl&status=verified&finding=tungro")
+    ).json()) as {
       reports: Report[];
     };
     expect(verifiedTungroList.reports).toHaveLength(1);
-    expect(verifiedTungroList.reports[0]).toMatchObject({ id: verifiedTungroJatisari, districtId: jatisari, finding: "tungro" });
+    expect(verifiedTungroList.reports[0]).toMatchObject({
+      id: verifiedTungroJatisari,
+      districtId: jatisari,
+      finding: "tungro",
+    });
 
-    const rejectedList = (await (await officer.get("/api/reports?scope=ppl&status=rejected")).json()) as { reports: Report[] };
+    const rejectedList = (await (await officer.get("/api/reports?scope=ppl&status=rejected")).json()) as {
+      reports: Report[];
+    };
     expect(rejectedList.reports.map((r) => r.id)).toEqual([rejectedId]);
 
     expect((await officer.get("/api/reports?scope=ppl&status=invalid")).status).toBe(422);
@@ -106,8 +176,19 @@ describe("P0.3 report verification, PostGIS clustering, and radar trends", () =>
 
     // Farmer has plot in Cikampek; otherFarmer has plot in Jatisari
     const pJatisari = await districtOffsetPoint(jatisari, 0, 0);
-    expect((await farmer.postJson("/api/plots", { name: "Petak Pantau", longitude: p1.longitude, latitude: p1.latitude })).status).toBe(201);
-    expect((await otherFarmer.postJson("/api/plots", { name: "Petak Luar", longitude: pJatisari.longitude, latitude: pJatisari.latitude })).status).toBe(201);
+    expect(
+      (await farmer.postJson("/api/plots", { name: "Petak Pantau", longitude: p1.longitude, latitude: p1.latitude }))
+        .status,
+    ).toBe(201);
+    expect(
+      (
+        await otherFarmer.postJson("/api/plots", {
+          name: "Petak Luar",
+          longitude: pJatisari.longitude,
+          latitude: pJatisari.latitude,
+        })
+      ).status,
+    ).toBe(201);
 
     const photo = await makeJpeg();
     const createAndVerify = async (pt: { longitude: number; latitude: number }, finding: string) => {
@@ -120,7 +201,14 @@ describe("P0.3 report verification, PostGIS clustering, and radar trends", () =>
       expect(res.status).toBe(201);
       const { id } = (await res.json()) as { id: string };
       expect(
-        (await officer.patchJson(`/api/reports/${id}/review`, { status: "verified", finding, severity: "mild", note: "" })).status,
+        (
+          await officer.patchJson(`/api/reports/${id}/review`, {
+            status: "verified",
+            finding,
+            severity: "mild",
+            note: "",
+          })
+        ).status,
       ).toBe(200);
       return id;
     };
@@ -129,24 +217,39 @@ describe("P0.3 report verification, PostGIS clustering, and radar trends", () =>
     const id1 = await createAndVerify(p1, "blast");
     await createAndVerify(p2, "blast");
     let radar = (await (await farmer.get("/api/radar")).json()) as RadarSnapshot;
-    expect(radar.summaries.find((s) => s.id === cikampek && s.finding === "blast")).toMatchObject({ count: 2, clustered: false });
+    expect(radar.summaries.find((s) => s.id === cikampek && s.finding === "blast")).toMatchObject({
+      count: 2,
+      clustered: false,
+    });
 
     // 3rd blast report >500m away -> still not clustered
     await createAndVerify(pFar, "blast");
     radar = (await (await farmer.get("/api/radar")).json()) as RadarSnapshot;
-    expect(radar.summaries.find((s) => s.id === cikampek && s.finding === "blast")).toMatchObject({ count: 3, clustered: false });
+    expect(radar.summaries.find((s) => s.id === cikampek && s.finding === "blast")).toMatchObject({
+      count: 3,
+      clustered: false,
+    });
     expect(await (await farmer.get("/api/alerts")).json()).toEqual([]);
 
     // Different finding (planthopper) right next to p1/p2 -> does NOT merge with blast cluster
     await createAndVerify(pSameSpot, "planthopper");
     radar = (await (await farmer.get("/api/radar")).json()) as RadarSnapshot;
-    expect(radar.summaries.find((s) => s.id === cikampek && s.finding === "blast")).toMatchObject({ count: 3, clustered: false });
-    expect(radar.summaries.find((s) => s.id === cikampek && s.finding === "planthopper")).toMatchObject({ count: 1, clustered: false });
+    expect(radar.summaries.find((s) => s.id === cikampek && s.finding === "blast")).toMatchObject({
+      count: 3,
+      clustered: false,
+    });
+    expect(radar.summaries.find((s) => s.id === cikampek && s.finding === "planthopper")).toMatchObject({
+      count: 1,
+      clustered: false,
+    });
 
     // 3rd nearby blast report within 500m -> cluster forms and alerts plot owners in district
     const idClose = await createAndVerify(pSameSpot, "blast");
     radar = (await (await farmer.get("/api/radar")).json()) as RadarSnapshot;
-    expect(radar.summaries.find((s) => s.id === cikampek && s.finding === "blast")).toMatchObject({ count: 4, clustered: true });
+    expect(radar.summaries.find((s) => s.id === cikampek && s.finding === "blast")).toMatchObject({
+      count: 4,
+      clustered: true,
+    });
 
     const alertsAfterCluster = (await (await farmer.get("/api/alerts")).json()) as { title: string }[];
     expect(alertsAfterCluster).toHaveLength(1);
@@ -155,7 +258,14 @@ describe("P0.3 report verification, PostGIS clustering, and radar trends", () =>
 
     // Initial /review cannot be repeated -> 409
     expect(
-      (await officer.patchJson(`/api/reports/${idClose}/review`, { status: "verified", finding: "blast", severity: "severe", note: "" })).status,
+      (
+        await officer.patchJson(`/api/reports/${idClose}/review`, {
+          status: "verified",
+          finding: "blast",
+          severity: "severe",
+          note: "",
+        })
+      ).status,
     ).toBe(409);
 
     // Stale revision 0 rejected -> 409
@@ -200,7 +310,10 @@ describe("P0.3 report verification, PostGIS clustering, and radar trends", () =>
     ]);
 
     radar = (await (await farmer.get("/api/radar")).json()) as RadarSnapshot;
-    expect(radar.summaries.find((s) => s.id === cikampek && s.finding === "blast")).toMatchObject({ count: 3, clustered: false });
+    expect(radar.summaries.find((s) => s.id === cikampek && s.finding === "blast")).toMatchObject({
+      count: 3,
+      clustered: false,
+    });
 
     const alertsAfterDissolve = (await (await farmer.get("/api/alerts")).json()) as { title: string }[];
     expect(alertsAfterDissolve.map((a) => a.title)).toContain("Koreksi data radar");

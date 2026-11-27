@@ -109,13 +109,17 @@ async function notifyRadarChanges(
   }
   if (corrected) {
     const stillActive = new Set(current.filter((row) => row.clustered).map((row) => `${row.id}:${row.finding}`));
-    const affected = new Map(previous.filter((row) => row.clustered && !stillActive.has(`${row.id}:${row.finding}`))
-      .map((row) => [row.id, row.name]));
-    for (const [districtId, name] of affected) await createAlert(client, {
-      districtId,
-      title: "Koreksi data radar",
-      body: `Petugas memperbarui hasil verifikasi di ${name}. Buka radar untuk melihat status klaster terkini.`,
-    });
+    const affected = new Map(
+      previous
+        .filter((row) => row.clustered && !stillActive.has(`${row.id}:${row.finding}`))
+        .map((row) => [row.id, row.name]),
+    );
+    for (const [districtId, name] of affected)
+      await createAlert(client, {
+        districtId,
+        title: "Koreksi data radar",
+        body: `Petugas memperbarui hasil verifikasi di ${name}. Buka radar untuk melihat status klaster terkini.`,
+      });
   }
 }
 
@@ -124,5 +128,7 @@ export async function getWeather(): Promise<Weather | null> {
     where: { onlyRow: true },
     select: { observedAt: true, fetchedAt: true, windSpeed: true, windDirection: true, humidity: true },
   });
-  return weather && { ...weather, observedAt: weather.observedAt.toISOString(), fetchedAt: weather.fetchedAt.toISOString() };
+  return (
+    weather && { ...weather, observedAt: weather.observedAt.toISOString(), fetchedAt: weather.fetchedAt.toISOString() }
+  );
 }

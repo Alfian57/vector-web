@@ -29,13 +29,22 @@ export async function correctAid(allocationId: string, authorId: string, body: u
     let deliveryId: string | null = null;
 
     if (input.target === "allocation") {
-      if (input.revision !== allocation.revision) throw new RequestError(409, "Alokasi sudah berubah. Buka kembali rincian terbaru.");
-      if (input.quantity < delivered) throw new RequestError(409, "Jumlah alokasi lebih kecil daripada jumlah yang sudah disalurkan.");
-      if (input.districtId !== allocation.districtId || input.item !== allocation.item || input.unit !== allocation.unit) {
+      if (input.revision !== allocation.revision)
+        throw new RequestError(409, "Alokasi sudah berubah. Buka kembali rincian terbaru.");
+      if (input.quantity < delivered)
+        throw new RequestError(409, "Jumlah alokasi lebih kecil daripada jumlah yang sudah disalurkan.");
+      if (
+        input.districtId !== allocation.districtId ||
+        input.item !== allocation.item ||
+        input.unit !== allocation.unit
+      ) {
         const used = await client.aidDelivery.findFirst({ where: { allocationId }, select: { id: true } });
         if (used) throw new RequestError(409, "Kecamatan, barang, dan satuan terkunci setelah penyaluran dicatat.");
       }
-      const district = await client.district.findUnique({ where: { id: input.districtId }, select: { id: true, name: true } });
+      const district = await client.district.findUnique({
+        where: { id: input.districtId },
+        select: { id: true, name: true },
+      });
       if (!district) throw new RequestError(422, "Kecamatan tidak ditemukan.");
       await client.$executeRaw`
         UPDATE aid_allocations SET district_id = ${district.id}, item = ${input.item}, quantity = ${input.quantity}::integer,
@@ -45,15 +54,24 @@ export async function correctAid(allocationId: string, authorId: string, body: u
         WHERE id = ${allocationId}::uuid
       `;
       previous = allocationSnapshot(allocation);
-      current = { districtName: district.name, item: input.item, quantity: input.quantity, unit: input.unit, note: input.note };
+      current = {
+        districtName: district.name,
+        item: input.item,
+        quantity: input.quantity,
+        unit: input.unit,
+        note: input.note,
+      };
     } else {
       deliveryId = input.deliveryId;
-      const [delivery] = await client.$queryRaw<Pick<AidDelivery, "recipient" | "quantity" | "note" | "voided" | "revision">[]>`
+      const [delivery] = await client.$queryRaw<
+        Pick<AidDelivery, "recipient" | "quantity" | "note" | "voided" | "revision">[]
+      >`
         SELECT recipient, quantity, note, voided_at IS NOT NULL AS voided, revision
         FROM aid_deliveries WHERE allocation_id = ${allocationId}::uuid AND id = ${deliveryId}::uuid
       `;
       if (!delivery) throw new RequestError(404, "Penyaluran tidak ditemukan.");
-      if (delivery.voided || input.revision !== delivery.revision) throw new RequestError(409, "Penyaluran sudah berubah. Buka kembali riwayat terbaru.");
+      if (delivery.voided || input.revision !== delivery.revision)
+        throw new RequestError(409, "Penyaluran sudah berubah. Buka kembali riwayat terbaru.");
       const quantity = input.target === "delivery" ? input.quantity : delivery.quantity;
       const recipient = input.target === "delivery" ? input.recipient : delivery.recipient;
       const note = input.target === "delivery" ? input.note : delivery.note;
@@ -67,7 +85,12 @@ export async function correctAid(allocationId: string, authorId: string, body: u
           original_input = COALESCE(original_input, jsonb_build_object('recipient', recipient, 'quantity', quantity, 'note', note))
         WHERE allocation_id = ${allocationId}::uuid AND id = ${deliveryId}::uuid
       `;
-      previous = { recipient: delivery.recipient, quantity: delivery.quantity, note: delivery.note, voided: delivery.voided };
+      previous = {
+        recipient: delivery.recipient,
+        quantity: delivery.quantity,
+        note: delivery.note,
+        voided: delivery.voided,
+      };
       current = { recipient, quantity, note, voided };
     }
     await client.aidCorrection.create({

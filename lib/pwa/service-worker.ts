@@ -44,26 +44,38 @@ async function cacheRadarPage(response: Response) {
 }
 
 worker.addEventListener("install", (event: WorkerEvent) => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(cacheName);
-    await cache.addAll(SW_ASSETS.map((path) => new Request(path, { credentials: "omit", cache: "reload" })));
-    await worker.skipWaiting();
-  })());
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(cacheName);
+      await cache.addAll(SW_ASSETS.map((path) => new Request(path, { credentials: "omit", cache: "reload" })));
+      await worker.skipWaiting();
+    })(),
+  );
 });
 worker.addEventListener("activate", (event: WorkerEvent) => {
-  event.waitUntil((async () => {
-    await Promise.all((await caches.keys()).filter((name) => name.startsWith("vektor-shell-") && name !== cacheName)
-      .map((name) => caches.delete(name)));
-    await worker.clients.claim();
-  })());
+  event.waitUntil(
+    (async () => {
+      await Promise.all(
+        (await caches.keys())
+          .filter((name) => name.startsWith("vektor-shell-") && name !== cacheName)
+          .map((name) => caches.delete(name)),
+      );
+      await worker.clients.claim();
+    })(),
+  );
 });
 worker.addEventListener("message", (event: WorkerMessageEvent) => {
   const port = event.ports[0];
   if (event.data !== cacheRadarShellMessage || !port) return;
-  event.waitUntil((async () => {
-    const response = await fetch(radarPath, { credentials: "same-origin", cache: "no-store", redirect: "error" });
-    return cacheRadarPage(response);
-  })().then((cached) => port.postMessage(cached), () => port.postMessage(false)));
+  event.waitUntil(
+    (async () => {
+      const response = await fetch(radarPath, { credentials: "same-origin", cache: "no-store", redirect: "error" });
+      return cacheRadarPage(response);
+    })().then(
+      (cached) => port.postMessage(cached),
+      () => port.postMessage(false),
+    ),
+  );
 });
 worker.addEventListener("fetch", (event: WorkerFetchEvent) => {
   const { request } = event;
@@ -75,36 +87,50 @@ worker.addEventListener("fetch", (event: WorkerFetchEvent) => {
     if (url.pathname === radarPath) {
       event.waitUntil(navigation.then(cacheRadarPage).catch(() => {}));
     }
-    event.respondWith(navigation.catch(async () => {
-      if (url.pathname === homePath && url.searchParams.get("view") === "alerts") {
-        return Response.redirect(new URL(radarAlertsPath, url.origin), 307);
-      }
-      if (url.pathname === radarPath) {
-        const owner = await offlineDb().accounts.get("account").catch(() => undefined);
-        if (!owner) return Response.redirect(new URL(homePath, url.origin), 307);
-      }
-      return (await (await caches.open(cacheName)).match(url.pathname)) ?? Response.error();
-    }));
+    event.respondWith(
+      navigation.catch(async () => {
+        if (url.pathname === homePath && url.searchParams.get("view") === "alerts") {
+          return Response.redirect(new URL(radarAlertsPath, url.origin), 307);
+        }
+        if (url.pathname === radarPath) {
+          const owner = await offlineDb()
+            .accounts.get("account")
+            .catch(() => undefined);
+          if (!owner) return Response.redirect(new URL(homePath, url.origin), 307);
+        }
+        return (await (await caches.open(cacheName)).match(url.pathname)) ?? Response.error();
+      }),
+    );
   } else if (SW_ASSETS.includes(url.pathname) && !isShell) {
-    event.respondWith(caches.open(cacheName).then(async (cache) => (await cache.match(url.pathname)) ?? fetch(request)));
+    event.respondWith(
+      caches.open(cacheName).then(async (cache) => (await cache.match(url.pathname)) ?? fetch(request)),
+    );
   }
 });
 worker.addEventListener("sync", (event: WorkerEvent & { tag: string }) => {
   if (event.tag === syncTag) {
-    event.waitUntil(syncReports().finally(async () => {
-      for (const client of await worker.clients.matchAll()) client.postMessage("vektor-queue-changed");
-    }));
+    event.waitUntil(
+      syncReports().finally(async () => {
+        for (const client of await worker.clients.matchAll()) client.postMessage("vektor-queue-changed");
+      }),
+    );
   }
 });
 worker.addEventListener("push", (event: WorkerPushEvent) => {
   let data: unknown;
-  try { data = event.data?.json(); } catch { data = null; }
+  try {
+    data = event.data?.json();
+  } catch {
+    data = null;
+  }
   const id = data && typeof data === "object" && "id" in data && typeof data.id === "string" ? data.id : "vektor";
-  event.waitUntil(worker.registration.showNotification("Peringatan baru dari VEKTOR", {
-    body: "Buka kotak masuk untuk melihat peringatan wilayah Anda.",
-    icon: "/icon-192.png",
-    tag: id,
-  }));
+  event.waitUntil(
+    worker.registration.showNotification("Peringatan baru dari VEKTOR", {
+      body: "Buka kotak masuk untuk melihat peringatan wilayah Anda.",
+      icon: "/icon-192.png",
+      tag: id,
+    }),
+  );
 });
 worker.addEventListener("notificationclick", (event: WorkerNotificationClick) => {
   event.notification.close();

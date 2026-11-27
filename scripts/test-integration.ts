@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { rm } from "node:fs/promises";
 import { generateVAPIDKeys } from "web-push";
 import { startFonnteStub } from "../tests/integration/helpers/fonnte-control";
 
@@ -7,11 +8,14 @@ const resolve = createRequire(import.meta.url).resolve;
 
 const testPgPort = Number(process.env.VEKTOR_TEST_PG_PORT ?? "55433");
 if (!Number.isInteger(testPgPort) || testPgPort === 5433 || testPgPort < 1024 || testPgPort > 65535) {
-  throw new Error(`Invalid VEKTOR_TEST_PG_PORT=${testPgPort}; port 5433 is reserved and never allowed for disposable tests.`);
+  throw new Error(
+    `Invalid VEKTOR_TEST_PG_PORT=${testPgPort}; port 5433 is reserved and never allowed for disposable tests.`,
+  );
 }
 
 const appPort = Number(process.env.VEKTOR_TEST_APP_PORT ?? "3101");
 const containerName = `vektor-test-postgis-${process.pid}`;
+const nextDistDir = ".next-integration";
 const testDbUrl = `postgresql://vektor_test:vektor_test@127.0.0.1:${testPgPort}/vektor_test`;
 const baseURL = `http://127.0.0.1:${appPort}`;
 
@@ -98,6 +102,7 @@ try {
     FONNTE_TEST_URL: fonnte.sendUrl,
     FONNTE_CONTROL_URL: fonnte.controlUrl,
     INTEGRATION_BASE_URL: baseURL,
+    VEKTOR_TEST_NEXT_DIST_DIR: nextDistDir,
     VEKTOR_TEST_PG_PORT: String(testPgPort),
     VAPID_PUBLIC_KEY: vapid.publicKey,
     VAPID_PRIVATE_KEY: vapid.privateKey,
@@ -124,10 +129,7 @@ try {
   await runChecked([bun, "test", "tests/integration", "--timeout", "45000"], runtimeEnv);
 
   console.log("Running headless Chromium IndexedDB & Service Worker harness (no product UI pages)...");
-  await runChecked(
-    [bun, "x", "playwright", "test", "--config=tests/offline/playwright.config.ts"],
-    runtimeEnv,
-  );
+  await runChecked([bun, "x", "playwright", "test", "--config=tests/offline/playwright.config.ts"], runtimeEnv);
 
   console.log("All VEKTOR non-UI integration tests passed.");
 } finally {
@@ -144,4 +146,5 @@ try {
     });
     await cleanup.exited.catch(() => {});
   }
+  await rm(nextDistDir, { recursive: true, force: true });
 }
