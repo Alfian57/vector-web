@@ -1,0 +1,40 @@
+.education-page { width: min(100% - 2 * clamp(16px, 5vw, 70px), 1080px); min-height: 100vh; margin-inline: auto; display: flex; flex-direction: column; }
+.education-header { min-height: 78px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
+.education-back { font-weight: 720; letter-spacing: .025em; color: var(--forest); }
+.education-back span { color: #83937e; margin-inline: 4px; }
+.education-intro { padding-block: clamp(42px, 8vw, 84px) clamp(28px, 5vw, 50px); max-width: 730px; }
+.education-kicker { display: inline-flex; align-items: center; gap: 7px; color: #466947; font-size: .85rem; font-weight: 680; }
+.education-intro h1 { max-width: 16ch; margin-top: 13px; color: var(--forest); font-size: clamp(2.2rem, 5vw, 4.2rem); }
+.education-intro p { max-width: 62ch; margin-top: 13px; color: var(--muted); line-height: 1.65; }
+.education-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px 11px; max-width: 680px; margin-bottom: 30px; }
+.education-search label { grid-column: 1 / -1; font-size: .84rem; font-weight: 650; }
+.education-search label span { color: var(--muted); font-weight: 450; }
+.education-search div { position: relative; }
+.education-search div svg { position: absolute; inset: 13px auto auto 12px; color: var(--muted); }
+.education-search input { width: 100%; min-height: 46px; padding: 9px 12px 9px 39px; border: 1px solid #cbd5c8; border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; }
+.education-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.education-card { display: flex; flex-direction: column; min-height: 218px; padding: clamp(17px, 3vw, 25px); background: var(--surface); border: 1px solid var(--line); border-radius: 11px; }
+.education-category { align-self: flex-start; padding: 5px 9px; border-radius: 100px; background: #e7eee0; color: #3e6241; font-size: .76rem; font-weight: 680; }
+.education-card h2 { margin-top: 14px; font-size: 1.26rem; }
+.education-card h2 a { color: var(--forest); }
+.education-card p { margin-top: 8px; color: var(--muted); font-size: .91rem; line-height: 1.55; }
+.education-card footer { display: flex; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 22px; color: var(--muted); font-size: .79rem; }
+.education-card footer a, .education-crumb, .education-footer a { color: var(--forest); font-weight: 660; }
+.education-empty { padding: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.education-empty p { margin-top: 7px; color: var(--muted); }
+.education-pagination { display: flex; justify-content: center; padding-block: 25px; }
+.education-footer { margin-top: auto; padding-block: 25px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: .82rem; }
+.education-article { width: min(100%, 760px); margin: 0 auto; padding-block: clamp(32px, 6vw, 66px); }
+.education-crumb { display: block; margin-bottom: 27px; font-size: .88rem; }
+.education-article h1 { margin-top: 14px; color: var(--forest); font-size: clamp(2rem, 5vw, 3.6rem); }
+.education-summary { margin-top: 14px; color: var(--muted); font-size: 1.09rem; line-height: 1.65; }
+.education-byline { margin-top: 15px; color: #6a796e; font-size: .82rem; }
+.education-rich-text { margin-top: clamp(28px, 5vw, 48px); color: #2d3b31; line-height: 1.78; font-size: 1.02rem; }
+.education-rich-text h2, .education-rich-text h3 { margin-block: 1.8em .65em; color: var(--forest); }
+.education-rich-text p, .education-rich-text ul, .education-rich-text ol { margin-block: .9em; }
+.education-rich-text ul, .education-rich-text ol { padding-left: 1.5em; }
+.education-rich-text a { color: #24523c; text-decoration: underline; text-underline-offset: 3px; }
+.education-rich-text img { display: block; max-width: 100%; height: auto; margin: 1.6em auto; border-radius: 10px; }
+.education-disclaimer { margin-top: 38px; padding: 17px 19px; background: #e8eee0; border-left: 3px solid #658354; border-radius: 4px 9px 9px 4px; }
+.education-disclaimer p { margin-top: 6px; color: var(--muted); line-height: 1.55; font-size: .9rem; }
+@media (max-width: 620px) { .education-grid { grid-template-columns: 1fr; } .education-search { grid-template-columns: minmax(0, 1fr); } .education-search label { grid-column: auto; } }

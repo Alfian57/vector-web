@@ -1,0 +1,10 @@
+.git
+.next
+node_modules
+/generated/prisma
+.env*
+public/sw.js
+public/sw-dev.js
+public/maplibre-worker.mjs
+test-results
+playwright-report

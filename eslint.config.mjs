@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "generated/prisma/**",
+    "public/sw.js",
+    "public/sw-dev.js",
+    "public/maplibre-worker.mjs",
+    "playwright-report/**",
+    "test-results/**",
   ]),
 ]);
 

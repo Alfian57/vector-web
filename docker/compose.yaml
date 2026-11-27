@@ -1,0 +1,56 @@
+name: vector-web
+
+x-app: &app
+  image: vektor:local
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile
+  env_file: ../.env
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_USER: vektor
+      POSTGRES_DB: vektor
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U vektor -d vektor"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  migrate:
+    <<: *app
+    command: ["bun", "run", "db:migrate"]
+  seed:
+    <<: *app
+    command: ["bun", "scripts/seed.ts", "--demo-deployment"]
+    environment:
+      VEKTOR_DEMO_DEPLOYMENT: "1"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+  app:
+    <<: *app
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+  worker:
+    <<: *app
+    command: ["bun", "run", "worker"]
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    restart: unless-stopped
+volumes:
+  postgres:

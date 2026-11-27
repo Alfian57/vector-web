@@ -1,0 +1,471 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../generated/prisma"
+  previewFeatures     = ["partialIndexes"]
+  importFileExtension = ""
+  moduleFormat        = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// SQL migrations also own the PostGIS types and database CHECK constraints.
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz(6)
+  refreshTokenExpiresAt DateTime? @db.Timestamptz(6)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime  @default(now()) @db.Timestamptz(6)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId])
+  @@map("account")
+}
+
+model AidAllocation {
+  id             String          @id @db.Uuid
+  districtId     String          @map("district_id")
+  item           String
+  quantity       Int
+  unit           String
+  note           String          @default("")
+  authorId       String          @map("author_id")
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  revision       Int             @default(0)
+  originalInput  Json?           @map("original_input")
+  user           User            @relation(fields: [authorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  district       District        @relation(fields: [districtId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  aidCorrections AidCorrection[]
+  aidDeliveries  AidDelivery[]
+
+  @@index([createdAt(sort: Desc), id(sort: Desc)], map: "aid_allocations_recent_idx")
+  @@map("aid_allocations")
+}
+
+model AidCorrection {
+  id           BigInt        @id @default(autoincrement())
+  allocationId String        @map("allocation_id") @db.Uuid
+  deliveryId   String?       @map("delivery_id") @db.Uuid
+  kind         String
+  reason       String
+  previous     Json
+  current      Json
+  authorId     String        @map("author_id")
+  recordedAt   DateTime      @default(dbgenerated("clock_timestamp()")) @map("recorded_at") @db.Timestamptz(6)
+  delivery     AidDelivery?  @relation(fields: [allocationId, deliveryId], references: [allocationId, id], onDelete: NoAction, onUpdate: NoAction)
+  allocation   AidAllocation @relation(fields: [allocationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user         User          @relation(fields: [authorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([allocationId, id(sort: Desc)], map: "aid_corrections_recent_idx")
+  @@map("aid_corrections")
+}
+
+model AidDelivery {
+  allocationId   String          @map("allocation_id") @db.Uuid
+  id             String          @db.Uuid
+  quantity       Int
+  recipient      String
+  note           String          @default("")
+  authorId       String          @map("author_id")
+  recordedAt     DateTime        @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  revision       Int             @default(0)
+  voidedAt       DateTime?       @map("voided_at") @db.Timestamptz(6)
+  originalInput  Json?           @map("original_input")
+  aidCorrections AidCorrection[]
+  allocation     AidAllocation   @relation(fields: [allocationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user           User            @relation(fields: [authorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([allocationId, id])
+  @@index([allocationId, recordedAt(sort: Desc), id(sort: Desc)], map: "aid_deliveries_recent_idx")
+  @@map("aid_deliveries")
+}
+
+model AlertRecipient {
+  alertId String    @map("alert_id") @db.Uuid
+  ownerId String    @map("owner_id")
+  readAt  DateTime? @map("read_at") @db.Timestamptz(6)
+  alert   Alert     @relation(fields: [alertId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user    User      @relation(fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([alertId, ownerId])
+  @@index([ownerId, alertId], map: "alert_inbox_idx")
+  @@map("alert_recipients")
+}
+
+model Alert {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  districtId      String           @map("district_id")
+  finding         Finding?
+  authorId        String?          @map("author_id")
+  title           String
+  body            String
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  requestId       String?          @map("request_id") @db.Uuid
+  alertRecipients AlertRecipient[]
+  user            User?            @relation(fields: [authorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  district        District         @relation(fields: [districtId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pushJobs        PushJob[]
+
+  @@unique([authorId, requestId], map: "alerts_author_request_key")
+  @@map("alerts")
+}
+
+model District {
+  id              String                  @id
+  name            String
+  geom            Unsupported("geometry")
+  aidAllocations  AidAllocation[]
+  alert           Alert[]
+  followUpEntries FollowUpEntry[]
+  followUps       FollowUp[]
+  plots           Plot[]
+  radarCounts     RadarCount[]
+  report          Report[]
+
+  @@index([geom], map: "districts_geom_gix", type: Gist)
+  @@map("districts")
+}
+
+model EducationArticle {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug        String           @unique
+  title       String
+  category    String
+  summary     String
+  content     Json             @db.JsonB
+  status      String           @default("draft")
+  authorId    String           @map("author_id")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
+  publishedAt DateTime?        @map("published_at") @db.Timestamptz(6)
+  author      User             @relation(fields: [authorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  images      EducationImage[]
+
+  @@index([status, publishedAt(sort: Desc)], map: "education_articles_published_idx")
+  @@index([category, status], map: "education_articles_category_idx")
+  @@map("education_articles")
+}
+
+model EducationImage {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  articleId String           @map("article_id") @db.Uuid
+  mimeType  String           @map("mime_type")
+  image     Bytes
+  width     Int
+  height    Int
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  article   EducationArticle @relation(fields: [articleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([articleId], map: "education_images_article_idx")
+  @@map("education_images")
+}
+
+model ActivityLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind       String
+  category   String
+  action     String
+  outcome    String   @default("success")
+  severity   String?
+  actorId    String?  @map("actor_id")
+  actorRole  String?  @map("actor_role")
+  targetType String?  @map("target_type")
+  targetId   String?  @map("target_id")
+  summary    String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  actor      User?    @relation("activity_actor", fields: [actorId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([createdAt(sort: Desc)], map: "activity_logs_recent_idx")
+  @@index([actorId, createdAt(sort: Desc)], map: "activity_logs_actor_idx")
+  @@index([kind, createdAt(sort: Desc)], map: "activity_logs_kind_idx")
+  @@map("activity_logs")
+}
+
+model WorkerJobStatus {
+  job           String    @id
+  lastAttemptAt DateTime  @default(now()) @map("last_attempt_at") @db.Timestamptz(6)
+  lastSuccessAt DateTime? @map("last_success_at") @db.Timestamptz(6)
+  lastErrorCode String?   @map("last_error_code")
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("worker_job_status")
+}
+
+model FollowUpEntry {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  districtId String   @map("district_id")
+  kind       String
+  status     String
+  note       String
+  authorId   String   @map("author_id")
+  recordedAt DateTime @map("recorded_at") @db.Timestamptz(6)
+  user       User     @relation(fields: [authorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  district   District @relation(fields: [districtId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([recordedAt(sort: Desc), id(sort: Desc)], map: "follow_up_entries_recent_idx")
+  @@map("follow_up_entries")
+}
+
+model FollowUp {
+  districtId String   @map("district_id")
+  kind       String
+  status     String
+  note       String
+  authorId   String   @map("author_id")
+  updatedAt  DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user       User     @relation(fields: [authorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  district   District @relation(fields: [districtId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([districtId, kind])
+  @@map("follow_ups")
+}
+
+model LocalWeather {
+  onlyRow       Boolean  @id @default(true) @map("only_row")
+  observedAt    DateTime @map("observed_at") @db.Timestamptz(6)
+  fetchedAt     DateTime @map("fetched_at") @db.Timestamptz(6)
+  windSpeed     Float    @map("wind_speed") @db.Real
+  windDirection Float    @map("wind_direction") @db.Real
+  humidity      Float    @db.Real
+
+  @@map("local_weather")
+}
+
+model Plot {
+  id         String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId    String                  @map("owner_id")
+  districtId String                  @map("district_id")
+  geom       Unsupported("geometry")
+  name       String
+  district   District                @relation(fields: [districtId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user       User                    @relation(fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([districtId, ownerId], map: "plots_district_idx")
+  @@index([ownerId], map: "plots_owner_idx")
+  @@map("plots")
+}
+
+model PushJob {
+  alertId       String           @map("alert_id") @db.Uuid
+  endpoint      String
+  ownerId       String           @map("owner_id")
+  attempts      Int              @default(0)
+  nextAttemptAt DateTime         @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  doneAt        DateTime?        @map("done_at") @db.Timestamptz(6)
+  alert         Alert            @relation(fields: [alertId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  subscription  PushSubscription @relation(fields: [endpoint], references: [endpoint], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([alertId, endpoint])
+  @@index([nextAttemptAt], map: "push_pending_idx", where: raw("(done_at IS NULL)"))
+  @@map("push_jobs")
+}
+
+model PushSubscription {
+  endpoint String    @id
+  ownerId  String    @map("owner_id")
+  keys     Json
+  pushJobs PushJob[]
+  user     User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([ownerId], map: "push_owner_idx")
+  @@map("push_subscriptions")
+}
+
+model RadarCount {
+  districtId String   @map("district_id")
+  finding    Finding
+  count      Int
+  clustered  Boolean
+  district   District @relation(fields: [districtId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([districtId, finding])
+  @@map("radar_counts")
+}
+
+model RadarState {
+  onlyRow   Boolean  @id @default(true) @map("only_row")
+  revision  BigInt   @default(0)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("radar_state")
+}
+
+model RateLimit {
+  id          String @id
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+
+  @@map("rateLimit")
+}
+
+model ReportPhoto {
+  reportId String @id @map("report_id") @db.Uuid
+  image    Bytes
+  report   Report @relation(fields: [reportId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("report_photos")
+}
+
+model ReportReviewHistory {
+  reportId   String       @map("report_id") @db.Uuid
+  revision   Int
+  status     ReportStatus
+  finding    Finding
+  severity   Severity?
+  note       String?
+  reason     String?
+  reviewerId String?      @map("reviewer_id")
+  recordedAt DateTime     @map("recorded_at") @db.Timestamptz(6)
+  report     Report       @relation(fields: [reportId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user       User?        @relation(fields: [reviewerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([reportId, revision])
+  @@map("report_review_history")
+}
+
+model Report {
+  id             String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientId       String                  @map("client_id") @db.Uuid
+  ownerId        String                  @map("owner_id")
+  payloadDigest  String                  @map("payload_digest")
+  districtId     String                  @map("district_id")
+  geom           Unsupported("geometry")
+  observedAt     DateTime                @map("observed_at") @db.Timestamptz(6)
+  submittedAt    DateTime                @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  notes          String
+  finding        Finding
+  status         ReportStatus            @default(pending)
+  severity       Severity?
+  reviewerId     String?                 @map("reviewer_id")
+  reviewNote     String?                 @map("review_note")
+  reviewedAt     DateTime?               @map("reviewed_at") @db.Timestamptz(6)
+  reviewRevision Int                     @default(0) @map("review_revision")
+  photo          ReportPhoto?
+  reviewHistory  ReportReviewHistory[]
+  district       District                @relation(fields: [districtId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  owner          User                    @relation("reports_owner_idTouser", fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reviewer       User?                   @relation("reports_reviewer_idTouser", fields: [reviewerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([ownerId, clientId])
+  @@index([status, submittedAt(sort: Desc)], map: "reports_inbox_idx")
+  @@index([observedAt, finding], map: "reports_observed_idx", where: raw("(status = 'verified'::report_status)"))
+  @@index([ownerId, submittedAt(sort: Desc)], map: "reports_owner_idx")
+  @@map("reports")
+}
+
+model LegacyMigration {
+  name String @id
+
+  @@map("schema_migrations")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime @db.Timestamptz(6)
+  token     String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @db.Timestamptz(6)
+  ipAddress String?
+  userAgent String?
+  impersonatedBy String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model SpatialReference {
+  srid      Int     @id
+  authName  String? @map("auth_name") @db.VarChar(256)
+  authSrid  Int?    @map("auth_srid")
+  srtext    String? @db.VarChar(2048)
+  proj4text String? @db.VarChar(2048)
+
+  @@map("spatial_ref_sys")
+  @@ignore
+}
+
+model User {
+  id                  String                @id
+  name                String
+  email               String                @unique
+  emailVerified       Boolean               @default(false)
+  phoneNumber         String?               @unique
+  phoneNumberVerified Boolean?              @default(false)
+  image               String?
+  createdAt           DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime              @default(now()) @db.Timestamptz(6)
+  role                String                @default("farmer")
+  banned              Boolean               @default(false)
+  banReason           String?
+  banExpires          DateTime?              @db.Timestamptz(6)
+  accounts            Account[]
+  aidAllocations      AidAllocation[]
+  aidCorrections      AidCorrection[]
+  aidDeliveries       AidDelivery[]
+  alertRecipients     AlertRecipient[]
+  alert               Alert[]
+  followUpEntries     FollowUpEntry[]
+  followUps           FollowUp[]
+  plots               Plot[]
+  pushSubscriptions   PushSubscription[]
+  reviewHistory       ReportReviewHistory[]
+  activityLogs        ActivityLog[]         @relation("activity_actor")
+  educationArticles   EducationArticle[]
+  ownedReports        Report[]              @relation("reports_owner_idTouser")
+  reviewedReports     Report[]              @relation("reports_reviewer_idTouser")
+  sessions            Session[]
+
+  @@map("user")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+enum Finding {
+  unknown
+  healthy
+  blast
+  blight
+  tungro
+  planthopper
+  brown_spot
+
+  @@map("finding")
+}
+
+enum ReportStatus {
+  pending
+  verified
+  rejected
+
+  @@map("report_status")
+}
+
+enum Severity {
+  mild
+  moderate
+  severe
+
+  @@map("severity")
+}

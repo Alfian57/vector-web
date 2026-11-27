@@ -28,6 +28,14 @@ Gunakan helper rute proyek dan jaga perilaku URL pada boundary pemiliknya.
 
 - Pertahankan struktur App Router dan file privat sesuai pola route yang ada.
 
+## Route VEKTOR
+
+- `/` adalah landing page publik. `/edukasi` dan `/edukasi/[slug]` menyajikan artikel yang sudah terbit.
+- `/radar` memerlukan sesi aktif. `/ppl` hanya untuk peran `officer`; `/admin` beserta subroute `/admin/accounts`, `/admin/education`, dan `/admin/logs` hanya untuk peran `admin`.
+- `/api/education` dan `/api/education/[slug]` hanya mengembalikan artikel terbit. Media draf memerlukan sesi Admin.
+- Endpoint `/api/admin/*` memeriksa sesi Admin di handler API. Pengelolaan akun hanya dapat menetapkan peran `farmer` atau `officer`; UI tidak dapat membuat Admin.
+- Perubahan route publik memerlukan tes akses dan kontrak pada `tests/integration/admin-education-logs.test.ts`.
+
 
 [Konteks proyek](../project/context.md)
 <!-- END my-skill-gweh -->
