@@ -1,21 +1,24 @@
 "use client";
 
-import { ArrowUpRight, CloudSun, Droplets, Wind } from "lucide-react";
+import { Droplets } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatDate, type Weather } from "@/lib/domain";
-import { tw } from "@/lib/tw";
+import { DashboardSkeleton, DashboardState } from "./dashboard-state";
 
 const weatherMaxAge = 45 * 60_000;
 const number = new Intl.NumberFormat("id-ID");
+const windPoints = ["Utara", "Timur laut", "Timur", "Tenggara", "Selatan", "Barat daya", "Barat", "Barat laut"];
 
 export function WeatherPanel({
   weather,
   issue,
   loading,
+  onRetry,
 }: {
   weather: Weather | null;
   issue: boolean;
   loading: boolean;
+  onRetry: () => void;
 }) {
   const [now, setNow] = useState<number>();
   const observedAt = weather?.observedAt;
@@ -32,55 +35,72 @@ export function WeatherPanel({
   }, [observedAt]);
 
   const expired = observedAt !== undefined && now !== undefined && now - Date.parse(observedAt) >= weatherMaxAge;
+  const windDirection = (((weather?.windDirection ?? 0) % 360) + 360) % 360;
+
   return (
-    <section className={tw("panel weather-panel")}>
-      <div className={tw("section-title")}>
-        <CloudSun size={22} />
-        <h2>Cuaca wilayah</h2>
+    <section className="dashboard-radar-widget dashboard-weather" aria-labelledby="weather-title">
+      <div className="dashboard-widget-heading">
+        <h2 id="weather-title">Cuaca wilayah</h2>
+        <a className="dashboard-widget-source" href="https://open-meteo.com/" target="_blank" rel="noreferrer">
+          Open-Meteo
+        </a>
       </div>
       {weather ? (
         <>
-          <dl className={tw("weather-list")}>
-            <div>
+          <dl className="dashboard-weather-measures">
+            <div className="dashboard-weather-humidity">
               <dt>
-                <Wind size={17} /> Kecepatan angin
+                <Droplets size={16} aria-hidden="true" /> Kelembapan
+              </dt>
+              <dd>
+                {number.format(weather.humidity)}
+                <span>%</span>
+              </dd>
+            </div>
+            <div className="dashboard-weather-wind">
+              <dt>
+                <span className="dashboard-wind-compass" aria-hidden="true">
+                  <span className="dashboard-compass-north">U</span>
+                  <span className="dashboard-compass-east">T</span>
+                  <span className="dashboard-compass-south">S</span>
+                  <span className="dashboard-compass-west">B</span>
+                  <i className="dashboard-compass-needle" style={{ transform: `rotate(${windDirection}deg)` }} />
+                </span>
+                <span className="sr-only">Angin dari </span>
+                {windPoints[Math.round(windDirection / 45) % windPoints.length]}
+                {" · "}
+                {number.format(windDirection)}°
               </dt>
               <dd>{number.format(weather.windSpeed)} km/jam</dd>
             </div>
-            <div>
-              <dt>
-                <ArrowUpRight size={17} /> Arah asal angin
-              </dt>
-              <dd>{weather.windDirection}°</dd>
-            </div>
-            <div>
-              <dt>
-                <Droplets size={17} /> Kelembapan
-              </dt>
-              <dd>{weather.humidity}%</dd>
-            </div>
           </dl>
-          {expired && (
-            <p className={tw("tag tag-pending")} role="status">
-              Data cuaca kedaluwarsa
+          <div className="dashboard-weather-observation">
+            {(expired || issue) && (
+              <p className="dashboard-weather-notice" role="status">
+                {expired ? "Data cuaca kedaluwarsa" : "Gagal memperbarui cuaca"}
+              </p>
+            )}
+            <p>
+              {issue ? "Observasi tersimpan" : "Observasi"} {formatDate(weather.observedAt)} WIB
             </p>
-          )}
-          <p className={tw("small muted")}>
-            {issue ? "Observasi tersimpan" : "Observasi"} {formatDate(weather.observedAt)} WIB
-          </p>
+          </div>
         </>
+      ) : loading ? (
+        <DashboardSkeleton label="Memuat cuaca…" kind="weather" />
+      ) : issue ? (
+        <DashboardState
+          compact
+          kind="error"
+          title="Cuaca gagal diperbarui"
+          action={
+            <button type="button" className="dashboard-inline-link" onClick={onRetry}>
+              Coba lagi
+            </button>
+          }
+        />
       ) : (
-        <p className={tw("muted")}>
-          {loading
-            ? "Memuat cuaca…"
-            : issue
-              ? "Cuaca gagal diperbarui. Coba lagi saat layanan tersedia."
-              : "Data cuaca belum tersedia."}
-        </p>
+        <DashboardState compact title="Data cuaca belum tersedia" />
       )}
-      <a className={tw("text-link small")} href="https://open-meteo.com/" target="_blank" rel="noreferrer">
-        Open-Meteo
-      </a>
     </section>
   );
 }

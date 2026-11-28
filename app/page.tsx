@@ -116,9 +116,9 @@ export default function Home() {
               Catat gejala tanaman meski tanpa sinyal. Lihat temuan yang sudah diverifikasi petugas penyuluh lapangan di
               radar Karawang.
             </p>
-            <Link className={tw(`${primaryActionClassName} mt-[23px]`)} href={radarPath} prefetch={false}>
+            <a className={tw(`${primaryActionClassName} mt-[23px]`)} href={radarPath}>
               Buka Radar <ArrowRight size={18} aria-hidden="true" />
-            </Link>
+            </a>
           </div>
           <figure className="relative m-0 aspect-4/3 bg-[#52774c] min-[761px]:aspect-auto min-[761px]:min-h-[410px]">
             <Image
@@ -386,9 +386,9 @@ export default function Home() {
             </p>
           </div>
           <div className="flex max-w-full min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-            <Link className={tw(primaryActionClassName)} href={radarPath} prefetch={false}>
+            <a className={tw(primaryActionClassName)} href={radarPath}>
               Buka Radar <ArrowRight size={18} aria-hidden="true" />
-            </Link>
+            </a>
             <Link
               className={tw(
                 "inline-flex items-center gap-[7px] text-[.88rem] font-[620] text-[#e3eedc] hover:underline hover:underline-offset-4",

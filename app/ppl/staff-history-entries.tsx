@@ -1,78 +1,89 @@
 "use client";
 
-import { useEffect, useState, type Key, type ReactNode } from "react";
+import { useEffect, useMemo, type Key, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import type { z } from "zod";
-import { apiData, errorMessage } from "@/lib/client";
-import type { Page } from "@/lib/domain";
 import { pageSchema } from "@/lib/api-contracts";
-import { HistoryPages } from "./history-pages";
+import { DashboardSkeleton, DashboardState } from "../_components/dashboard-state";
+import { DataTable } from "../_components/data-table";
+import { Pagination } from "../_components/pagination";
+import { useOfficerData } from "./use-ppl-dashboard";
 import { tw } from "@/lib/tw";
+import { normalizeBrowserPage, pageQueryValue, parsePageIndex, patchBrowserQuery } from "@/lib/query-state";
 
 export type HistoryEntriesProps<T> = {
+  label: string;
+  columns: readonly string[];
   path: string;
-  revision: string | number;
+  pageParam?: string;
+  revision?: number;
   schema: z.ZodType<T>;
   entryKey: (entry: T) => Key;
   renderEntry: (entry: T) => ReactNode;
 };
 
-export function StaffHistoryEntries<T>({ path, revision, schema, entryKey, renderEntry }: HistoryEntriesProps<T>) {
-  const [page, setPage] = useState(0);
-  const [data, setData] = useState<Page<T>>();
-  const [issue, setIssue] = useState("");
-  const [reload, setReload] = useState(0);
+export function StaffHistoryEntries<T>({
+  label,
+  columns,
+  path,
+  pageParam = "historyPage",
+  revision,
+  schema,
+  entryKey,
+  renderEntry,
+}: HistoryEntriesProps<T>) {
+  const search = useSearchParams();
+  const rawPage = search.get(pageParam);
+  const page = parsePageIndex(rawPage);
+  const responseSchema = useMemo(() => pageSchema(schema), [schema]);
+  const separator = path.includes("?") ? "&" : "?";
+  const { data, issue, retry, loading } = useOfficerData(`${path}${separator}page=${page}`, responseSchema, revision);
+  const currentPage =
+    data?.totalPages === undefined ? page : data.totalPages > 0 ? Math.min(page, data.totalPages - 1) : 0;
 
   useEffect(() => {
-    const pending = new AbortController();
-    const { signal } = pending;
-    const separator = path.includes("?") ? "&" : "?";
-    void apiData(`${path}${separator}page=${page}`, pageSchema(schema), { signal })
-      .then((result) => {
-        if (!signal.aborted) {
-          setData(result);
-          setIssue("");
-        }
-      })
-      .catch((error) => {
-        if (!signal.aborted) setIssue(errorMessage(error));
-      });
-    return () => pending.abort();
-  }, [path, page, revision, reload, schema]);
+    normalizeBrowserPage(pageParam, rawPage, page);
+  }, [page, pageParam, rawPage]);
+
+  useEffect(() => {
+    if (data) normalizeBrowserPage(pageParam, rawPage, currentPage);
+  }, [currentPage, data, pageParam, rawPage]);
 
   return (
     <>
       {issue && (
-        <p className={tw("panel-note error-text")} role="alert">
-          {issue}{" "}
-          <button className={tw("text-link")} onClick={() => setReload((value) => value + 1)}>
-            Coba lagi
-          </button>
-        </p>
+        <DashboardState
+          compact
+          kind="error"
+          title="Data belum dapat diperbarui"
+          description={issue}
+          action={
+            <button className={tw("secondary")} onClick={retry}>
+              Coba lagi
+            </button>
+          }
+        />
       )}
-      {data ? (
-        data.entries.length ? (
-          <ul className={tw("list")}>
-            {data.entries.map((entry) => (
-              <li key={entryKey(entry)}>{renderEntry(entry)}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className={tw("panel-note muted")}>Riwayat masih kosong.</p>
-        )
+      {data?.entries.length ? (
+        <DataTable label={label} columns={columns} busy={loading}>
+          {data.entries.map((entry) => (
+            <tr key={entryKey(entry)}>{renderEntry(entry)}</tr>
+          ))}
+        </DataTable>
+      ) : loading ? (
+        <DashboardSkeleton kind="table" columns={columns.length} label="Memuat riwayat…" />
       ) : (
         !issue && (
-          <p className={tw("panel-note")} role="status">
-            Memuat riwayat…
-          </p>
+          <DashboardState title="Riwayat masih kosong" description="Perubahan yang disimpan akan tercatat di sini." />
         )
       )}
-      <HistoryPages
-        page={page}
-        hasMore={data?.hasMore}
-        onPage={(next) => {
-          setPage(next);
-          setData(undefined);
-        }}
+      <Pagination
+        label={`Halaman ${label.toLocaleLowerCase("id-ID")}`}
+        page={currentPage}
+        hasNext={data?.hasMore ?? false}
+        totalPages={data?.totalPages}
+        busy={loading}
+        onPage={(nextPage) => patchBrowserQuery({ [pageParam]: pageQueryValue(nextPage) })}
       />
     </>
   );

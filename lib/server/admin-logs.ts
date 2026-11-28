@@ -2,14 +2,16 @@ import type { AccountRole, ActivityLog, Page } from "@/lib/domain";
 import { db } from "./db";
 import { RequestError } from "./http";
 import { adminPageIndex } from "./admin-pagination";
+import { dashboardPageSize } from "@/lib/pagination";
 
-const pageSize = 25;
+const pageSize = dashboardPageSize;
 
 export async function listActivityLogs(params: URLSearchParams): Promise<Page<ActivityLog>> {
   const page = adminPageIndex(params);
   const kind = params.get("kind");
   const category = params.get("category")?.trim();
   const actorId = params.get("actor")?.trim();
+  const account = params.get("account")?.trim().slice(0, 100);
   const query = params.get("q")?.trim().slice(0, 100);
   if (kind && !["audit", "system"].includes(kind)) throw new RequestError(422, "Jenis log tidak valid.");
   const from = params.get("from");
@@ -19,27 +21,43 @@ export async function listActivityLogs(params: URLSearchParams): Promise<Page<Ac
   if ((fromDate && !Number.isFinite(fromDate.valueOf())) || (toDate && !Number.isFinite(toDate.valueOf()))) {
     throw new RequestError(422, "Rentang waktu log tidak valid.");
   }
-  const rows = await db().activityLog.findMany({
-    where: {
-      ...(kind ? { kind } : {}),
-      ...(category ? { category: category.slice(0, 80) } : {}),
-      ...(actorId ? { actorId } : {}),
-      ...(query
-        ? {
-            OR: [
-              { action: { contains: query, mode: "insensitive" as const } },
-              { category: { contains: query, mode: "insensitive" as const } },
-              { summary: { contains: query, mode: "insensitive" as const } },
-            ],
-          }
-        : {}),
-      createdAt: { gte: fromDate, lte: toDate },
-    },
-    include: { actor: { select: { name: true } } },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    skip: page * pageSize,
-    take: pageSize + 1,
-  });
+  const where = {
+    ...(kind ? { kind } : {}),
+    ...(category ? { category: category.slice(0, 80) } : {}),
+    ...(actorId ? { actorId } : {}),
+    ...(account
+      ? {
+          actor: {
+            is: {
+              OR: [
+                { name: { contains: account, mode: "insensitive" as const } },
+                { email: { contains: account, mode: "insensitive" as const } },
+              ],
+            },
+          },
+        }
+      : {}),
+    ...(query
+      ? {
+          OR: [
+            { action: { contains: query, mode: "insensitive" as const } },
+            { category: { contains: query, mode: "insensitive" as const } },
+            { summary: { contains: query, mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+    createdAt: { gte: fromDate, lte: toDate },
+  };
+  const [rows, total] = await Promise.all([
+    db().activityLog.findMany({
+      where,
+      include: { actor: { select: { name: true } } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: page * pageSize,
+      take: pageSize + 1,
+    }),
+    db().activityLog.count({ where }),
+  ]);
   const entries: ActivityLog[] = rows.slice(0, pageSize).map(({ actor, ...row }) => ({
     ...row,
     kind: row.kind === "system" ? "system" : "audit",
@@ -49,7 +67,7 @@ export async function listActivityLogs(params: URLSearchParams): Promise<Page<Ac
     actorRole: isAccountRole(row.actorRole) ? row.actorRole : null,
     createdAt: row.createdAt.toISOString(),
   }));
-  return { entries, hasMore: rows.length > pageSize };
+  return { entries, hasMore: rows.length > pageSize, totalPages: Math.ceil(total / pageSize) };
 }
 
 function isAccountRole(role: string | null): role is AccountRole {

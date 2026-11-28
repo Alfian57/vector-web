@@ -4,6 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { devices, expect, test } from "@playwright/test";
 import sharp from "sharp";
 import type { FollowUpEntry, Page, RadarSnapshot, ReviewEntry } from "../../lib/domain";
+import type { QueuedReport } from "../../lib/pwa/storage";
 import { db } from "../../lib/server/db";
 import { deliverPush } from "../../lib/server/jobs";
 import { account, baseURL, createPhoneGenerator, origin, password, receivedCode } from "./helpers/pilot-fixtures";
@@ -71,6 +72,11 @@ test("mobile offline reporting, private photos, live review and area alerts", as
     expect(new URL(deniedDashboard.headers().location, baseURL).searchParams.get("notice")).toBe("ppl-required");
     await officerPage.goto("/ppl");
     await expect(officerPage.getByText("Terhubung langsung")).toBeVisible();
+    await officerPage
+      .getByRole("navigation", { name: "Navigasi PPL" })
+      .getByRole("link", { name: "Antrean laporan" })
+      .click();
+    await expect(officerPage).toHaveURL(/\/ppl\/reports$/);
     expect((await other.request.get("/api/ppl/events")).status()).toBe(403);
 
     const add = await mobile.request.post("/api/plots", {
@@ -104,10 +110,14 @@ test("mobile offline reporting, private photos, live review and area alerts", as
     await expect(mobilePage).toHaveURL(/\/radar$/);
     await mobilePage.reload();
     await expect(mobilePage.getByText("Offline", { exact: true })).toBeVisible();
-    await expect(mobilePage.getByText("Peta Karawang sudah tersimpan di perangkat ini.")).toBeVisible();
+    await expect(mobilePage.getByText("Tersimpan di perangkat", { exact: true })).toBeVisible();
     await expect(mobilePage.locator("canvas.maplibregl-canvas")).toBeVisible();
     await expect(mobilePage.getByText("Memuat peta Karawang…")).toBeHidden();
     await expect(mobilePage.getByText("Peta dasar belum dapat dimuat.")).toBeHidden();
+    await mobilePage
+      .getByRole("navigation", { name: "Navigasi utama" })
+      .getByRole("link", { name: "Laporan", exact: true })
+      .click();
     await mobilePage.getByRole("button", { name: "Buat laporan" }).click();
     await expect(mobilePage.getByText("Catatan gejala (opsional)")).toBeVisible();
     await expect(mobilePage.getByLabel("Lintang")).toHaveAttribute("placeholder", "Contoh: -6.33755");
@@ -137,8 +147,45 @@ test("mobile offline reporting, private photos, live review and area alerts", as
     await mobilePage.getByLabel("Catatan gejala").fill("Laporan offline");
     await mobilePage.getByRole("button", { name: "Simpan laporan" }).click();
     await expect(mobilePage.getByText("Menunggu sinkronisasi")).toBeVisible();
+    await expect(mobilePage).toHaveURL(/\/radar\/reports(?:\?|$)/);
+    const queuedId = await mobilePage.evaluate(
+      () =>
+        new Promise<string>((resolve, reject) => {
+          const open = indexedDB.open("vektor");
+          open.onerror = () => reject(open.error);
+          open.onsuccess = () => {
+            const database = open.result;
+            const transaction = database.transaction("queue", "readwrite");
+            const lookup = transaction.objectStore("queue").openCursor();
+            let id = "";
+            lookup.onsuccess = () => {
+              const cursor = lookup.result;
+              if (!cursor) return;
+              const report = cursor.value as QueuedReport;
+              id = report.id;
+              cursor.update({ ...report, error: "Periksa kembali data laporan." });
+            };
+            transaction.oncomplete = () => {
+              database.close();
+              if (id) resolve(id);
+              else reject(new Error("Queued report fixture is missing"));
+            };
+            transaction.onabort = () => reject(transaction.error);
+          };
+        }),
+    );
     await mobilePage.reload();
-    await mobilePage.getByRole("button", { name: "Laporan", exact: true }).click();
+    await mobilePage.getByRole("link", { name: "Perbaiki", exact: true }).click();
+    await expect(mobilePage).toHaveURL(`/radar/reports/${queuedId}/edit`);
+    await mobilePage.reload();
+    await expect(mobilePage.getByLabel("Catatan gejala")).toHaveValue("Laporan offline");
+    await mobilePage.getByLabel("Catatan gejala").fill("Laporan offline diperbaiki");
+    await mobilePage.getByRole("button", { name: "Simpan laporan" }).click();
+    await expect(
+      mobilePage.getByRole("table", { name: "Antrean perangkat" }).getByText("Menunggu sinkronisasi"),
+    ).toBeVisible();
+    await mobilePage.reload();
+    await mobilePage.getByRole("link", { name: "Laporan", exact: true }).click();
     await expect(mobilePage.getByText("Menunggu sinkronisasi")).toBeVisible();
     await expect(mobilePage.getByText("Riwayat laporan terkirim tersedia saat perangkat terhubung.")).toBeVisible();
     await expect(mobilePage.getByText("Memuat laporan…")).toBeHidden();
@@ -146,7 +193,7 @@ test("mobile offline reporting, private photos, live review and area alerts", as
     await db().session.updateMany({ where: { userId: owner.id }, data: { expiresAt: new Date(Date.now() - 60_000) } });
     await mobile.setOffline(false);
     await expect(mobilePage).toHaveURL(
-      (url) => url.pathname === "/masuk" && url.searchParams.get("next") === "/radar?view=reports",
+      (url) => url.pathname === "/masuk" && url.searchParams.get("next") === "/radar/reports",
     );
     expect(await db().report.count({ where: { ownerId: owner.id } })).toBe(0);
 
@@ -168,7 +215,7 @@ test("mobile offline reporting, private photos, live review and area alerts", as
         response = await signIn();
       }
       expect(response.ok()).toBe(true);
-      await mobilePage.getByRole("button", { name: "Laporan", exact: true }).click({ timeout: 15_000 });
+      await mobilePage.getByRole("link", { name: "Laporan", exact: true }).click({ timeout: 15_000 });
     }
 
     await loginInBrowser(phones[1]);
@@ -176,7 +223,7 @@ test("mobile offline reporting, private photos, live review and area alerts", as
     await expect(mobilePage.getByText("Menunggu sinkronisasi")).toBeHidden();
     await loginInBrowser(phones[0]);
     await expect(mobilePage.getByText("Antrean kosong.")).toBeVisible({ timeout: 25_000 });
-    await expect(officerPage.getByRole("button", { name: `Belum diketahui · ${point.name}` })).toBeVisible({
+    await expect(officerPage.getByRole("link", { name: `Tinjau Belum diketahui di ${point.name}` })).toBeVisible({
       timeout: 12_000,
     });
     const pending = (await (await mobile.request.get("/api/reports")).json()) as { reports: { id: string }[] };
@@ -188,7 +235,7 @@ test("mobile offline reporting, private photos, live review and area alerts", as
       (await other.request.patch(`/api/reports/${first}/review`, { headers: origin, data: verified })).status(),
     ).toBe(403);
 
-    await officerPage.getByRole("button", { name: `Belum diketahui · ${point.name}` }).click();
+    await officerPage.getByRole("link", { name: `Tinjau Belum diketahui di ${point.name}` }).click();
     await expect(officerPage.getByAltText("Foto daun dari laporan petani")).toBeVisible();
     await expect(officerPage.getByLabel("Keputusan")).toHaveValue("");
     await officerPage.getByLabel("Keputusan").selectOption("rejected");
@@ -267,6 +314,7 @@ test("mobile offline reporting, private photos, live review and area alerts", as
     expect((await approve(another)).status()).toBe(200);
     expect(await (await mobile.request.get("/api/alerts")).json()).toHaveLength(1);
 
+    await officerPage.goto("/ppl/follow-ups/broadcast");
     let dropped = false;
     await officerPage.route("**/api/ppl/broadcasts", async (route) => {
       if (dropped) return route.continue();
@@ -283,14 +331,14 @@ test("mobile offline reporting, private photos, live review and area alerts", as
     await officerPage.getByRole("button", { name: "Kirim siaran" }).click();
     await expect(officerPage.getByText("Siaran dikirim ke kotak masuk wilayah.")).toBeVisible();
     await officerPage.unroute("**/api/ppl/broadcasts");
-    await mobilePage.getByRole("button", { name: "Peringatan", exact: true }).click();
+    await mobilePage.getByRole("button", { name: /Notifikasi/ }).click();
     await expect(mobilePage.getByText("Siaran PPL")).toHaveCount(1);
     await expect(mobilePage.getByText("Siaran PPL")).toBeVisible();
     await expect(mobilePage.getByText("Klaster terverifikasi")).toBeVisible();
     await mobilePage.evaluate(() => {
       Object.defineProperty(Notification, "requestPermission", { configurable: true, value: async () => "denied" });
     });
-    await mobilePage.getByRole("button", { name: "Aktifkan notifikasi" }).click();
+    await mobilePage.getByRole("button", { name: "Aktifkan" }).click();
     await expect(mobilePage.getByText("Izin notifikasi belum diberikan.", { exact: false })).toBeVisible();
 
     const endpoint = `https://fcm.googleapis.com/fcm/send/${randomUUID()}`;
@@ -318,7 +366,7 @@ test("mobile offline reporting, private photos, live review and area alerts", as
         },
       });
     }, endpoint);
-    await mobilePage.getByRole("button", { name: "Aktifkan notifikasi" }).click();
+    await mobilePage.getByRole("button", { name: "Aktifkan" }).click();
     await expect(mobilePage.getByText("Notifikasi perangkat diaktifkan.")).toBeVisible();
     const ownsPush = { headers: origin, data: { endpoint } };
     expect(await (await mobile.request.post("/api/push/status", ownsPush)).json()).toEqual({ subscribed: true });
@@ -350,16 +398,23 @@ test("mobile offline reporting, private photos, live review and area alerts", as
     `;
     expect(job?.done).toBe(true);
     expect(sentPush).toEqual([{ endpoint, payload: { id: job.alertId } }]);
-    await mobilePage.getByRole("button", { name: "Matikan notifikasi" }).click();
+    await mobilePage.getByRole("button", { name: "Matikan" }).click();
     await expect(mobilePage.getByText("Notifikasi perangkat dinonaktifkan.")).toBeVisible();
     expect(await (await mobile.request.post("/api/push/status", ownsPush)).json()).toEqual({ subscribed: false });
 
-    const follow = await staff.request.put("/api/ppl/follow-ups", {
-      headers: origin,
-      data: { districtId: point.id, kind: "outreach", status: "planned", note: "Kunjungan uji" },
-    });
-    expect(follow.status()).toBe(200);
-    await expect(officerPage.getByText("Kunjungan uji")).toBeVisible({ timeout: 12_000 });
+    await officerPage.getByRole("link", { name: "Kembali ke tindak lanjut" }).click();
+    await officerPage.getByRole("link", { name: "Catat tindak lanjut" }).click();
+    await expect(officerPage).toHaveURL(/\/ppl\/follow-ups\/create$/);
+    await officerPage.getByLabel("Kecamatan tindak lanjut").selectOption(point.id);
+    await officerPage.getByLabel("Jenis").selectOption("outreach");
+    await officerPage.getByLabel("Status tindak lanjut").selectOption("planned");
+    await officerPage.getByLabel("Catatan tindak lanjut").fill("Kunjungan uji");
+    await officerPage.getByRole("button", { name: "Simpan tindak lanjut" }).click();
+    await expect(officerPage.getByText("Tindak lanjut tersimpan.")).toBeVisible();
+    await officerPage.getByRole("link", { name: "Kembali ke tindak lanjut" }).click();
+    await expect(
+      officerPage.getByRole("table", { name: "Tindak lanjut per kecamatan" }).getByText("Kunjungan uji"),
+    ).toBeVisible({ timeout: 12_000 });
     const followUp = {
       id: randomUUID(),
       districtId: point.id,
@@ -374,20 +429,32 @@ test("mobile offline reporting, private photos, live review and area alerts", as
     expect((await mobile.request.get(followPath)).status()).toBe(403);
     const followHistory = (await (await staff.request.get(followPath)).json()) as Page<FollowUpEntry>;
     expect(followHistory.entries.map((entry) => entry.note)).toEqual(["Kunjungan selesai", "Kunjungan uji"]);
-    await officerPage.getByText("Riwayat tindak lanjut", { exact: true }).click();
     await expect(
-      officerPage.locator("details").filter({ hasText: "Riwayat tindak lanjut" }).getByText("Kunjungan uji"),
+      officerPage.getByRole("table", { name: "Riwayat tindak lanjut" }).getByText("Kunjungan uji"),
     ).toBeVisible();
 
+    await officerPage
+      .getByRole("navigation", { name: "Navigasi PPL" })
+      .getByRole("link", { name: "Antrean laporan" })
+      .click();
     await officerPage.getByLabel("Status laporan").selectOption("verified");
     await officerPage
-      .getByRole("button", { name: `Blas daun · ${point.name}` })
+      .getByRole("link", { name: `Tinjau Blas daun di ${point.name}` })
       .first()
       .click();
-    await officerPage.getByRole("button", { name: "Koreksi keputusan" }).click();
+    await officerPage.getByRole("link", { name: "Koreksi keputusan" }).click();
     await officerPage.getByLabel("Keparahan").selectOption("severe");
     await officerPage.getByLabel("Alasan koreksi keputusan").fill("Kondisi rumpun diperiksa kembali");
     await officerPage.getByRole("button", { name: "Simpan koreksi keputusan" }).click();
+    await expect(
+      officerPage.getByRole("table", { name: "Riwayat verifikasi" }).getByText("Kondisi rumpun diperiksa kembali"),
+    ).toBeVisible();
+    const reportsPage = await mobile.newPage();
+    await reportsPage.goto("/radar/reports");
+    const sentReports = reportsPage.getByRole("table", { name: "Laporan terkirim" });
+    await expect(sentReports.getByRole("columnheader", { name: "Saran tindak lanjut" })).toBeVisible();
+    await expect(sentReports.getByRole("cell", { name: /Periksa kembali petak/ }).first()).toBeVisible();
+    await reportsPage.close();
     const reviews = `/api/reports/${another}/reviews`;
     await expect
       .poll(async () => ((await (await staff.request.get(reviews)).json()) as Page<ReviewEntry>).entries.length)
@@ -416,7 +483,7 @@ test("mobile offline reporting, private photos, live review and area alerts", as
       expect.objectContaining({ title: "Koreksi data radar" }),
     );
 
-    await mobilePage.getByRole("button", { name: "Aktifkan notifikasi" }).click();
+    await mobilePage.getByRole("button", { name: "Aktifkan" }).click();
     await expect(mobilePage.getByText("Notifikasi perangkat diaktifkan.")).toBeVisible();
     await mobilePage.route("**/api/push", (route) =>
       route.fulfill({ status: 503, json: { message: "Pembersihan notifikasi gagal." } }),

@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { ArrowLeft } from "lucide-react";
-import { Brand } from "@/app/_components/brand";
+import { ProfileWorkspace } from "./profile-workspace";
 import { getAccountProfile } from "@/lib/server/profile";
 import { getAccount } from "@/lib/server/auth";
 import { recordPageView } from "@/lib/server/activity-log";
@@ -24,23 +24,18 @@ export async function ProtectedProfile() {
 
   const [profile] = await Promise.all([getAccountProfile(account), recordPageView(account, profilePath)]);
   return (
-    <main className={tw(styles.page)}>
-      <header className={tw(styles.header)}>
-        <Brand />
+    <ProfileWorkspace account={account}>
+      <header className="dashboard-profile-heading">
+        <div>
+          <h1 className={tw(styles.headingTitle)}>Profil akun</h1>
+          <p className={tw(styles.headingDescription)}>Identitas, kontak, dan keamanan akun Anda.</p>
+        </div>
         <Link className={tw(styles.back)} href={dashboardForRole(account.role)}>
           <ArrowLeft size={16} aria-hidden="true" />
           Kembali ke dashboard
         </Link>
       </header>
-      <div className={tw(styles.main)}>
-        <div className={tw(styles.heading)}>
-          <h1 className={tw(styles.headingTitle)}>Profil akun</h1>
-          <p className={tw(styles.headingDescription)}>
-            Kelola nama dan foto yang digunakan di VEKTOR, serta perbarui kata sandi akun Anda.
-          </p>
-        </div>
-        <ProfileForm initial={profile} />
-      </div>
-    </main>
+      <ProfileForm initial={profile} />
+    </ProfileWorkspace>
   );
 }

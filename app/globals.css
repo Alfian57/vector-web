@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./dashboard.css";
 
 :root {
   --paper: #f4f5ec;
@@ -9,6 +10,7 @@
   --line: #dbe1d3;
   --accent: #d9ed94;
   --safety: #a13125;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2353645a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 @theme inline {
@@ -101,7 +103,7 @@
     display: block;
     width: 100%;
     margin-top: 4px;
-    padding: 8px 10px;
+    padding: 8px 34px 8px 10px;
     min-height: 42px;
     border: 1px solid #c7d1c1;
     border-radius: 6px;
@@ -110,6 +112,15 @@
     font-size: 0.9rem;
     font-weight: 450;
     line-height: 1.4;
+  }
+
+  select {
+    appearance: none;
+    padding-right: 34px;
+    background-image: var(--select-chevron);
+    background-repeat: no-repeat;
+    background-position: right 11px center;
+    background-size: 14px 14px;
   }
 
   label textarea {
@@ -136,7 +147,7 @@
   }
 }
 
-/* Rich text comes from saved article HTML and the Tiptap editor DOM. */
+/* Article content is rendered from Tiptap documents. */
 @layer components {
   .education-rich-text {
     margin-top: clamp(28px, 5vw, 48px);
@@ -145,27 +156,79 @@
     line-height: 1.78;
   }
 
-  .education-rich-text h2,
-  .education-rich-text h3 {
-    margin-block: 1.8em 0.65em;
+  :is(.education-rich-text, .education-editor .tiptap) :is(h1, h2, h3, h4, h5, h6) {
+    margin-block: 1.1em 0.4em;
     color: var(--forest);
+    font-weight: 690;
+    line-height: 1.25;
   }
 
-  .education-rich-text p,
-  .education-rich-text ul,
-  .education-rich-text ol {
+  :is(.education-rich-text, .education-editor .tiptap) h1 {
+    font-size: 1.65rem;
+  }
+
+  :is(.education-rich-text, .education-editor .tiptap) h4 {
+    font-size: 1.05rem;
+  }
+
+  :is(.education-rich-text, .education-editor .tiptap) h5 {
+    font-size: 0.98rem;
+  }
+
+  :is(.education-rich-text, .education-editor .tiptap) h6 {
+    font-size: 0.9rem;
+  }
+
+  .education-rich-text > p {
     margin-block: 0.9em;
   }
 
-  .education-rich-text ul,
-  .education-rich-text ol {
-    padding-left: 1.5em;
+  :is(.education-rich-text, .education-editor .tiptap) :is(ul, ol) {
+    margin-block: 0.45em;
+    padding-inline-start: 1.6em;
   }
 
-  .education-rich-text a {
+  :is(.education-rich-text, .education-editor .tiptap) ul {
+    list-style-type: disc;
+  }
+
+  :is(.education-rich-text, .education-editor .tiptap) ul ul {
+    list-style-type: circle;
+  }
+
+  :is(.education-rich-text, .education-editor .tiptap) ol {
+    list-style-type: decimal;
+  }
+
+  :is(.education-rich-text, .education-editor .tiptap) ol[type="a"] {
+    list-style-type: lower-alpha;
+  }
+
+  :is(.education-rich-text, .education-editor .tiptap) ol[type="A"] {
+    list-style-type: upper-alpha;
+  }
+
+  :is(.education-rich-text, .education-editor .tiptap) ol[type="i"] {
+    list-style-type: lower-roman;
+  }
+
+  :is(.education-rich-text, .education-editor .tiptap) ol[type="I"] {
+    list-style-type: upper-roman;
+  }
+
+  :is(.education-rich-text, .education-editor .tiptap) a {
     color: #24523c;
     text-decoration: underline;
     text-underline-offset: 3px;
+  }
+
+  .education-rich-text blockquote,
+  .education-editor .tiptap blockquote {
+    margin: 1.15em 0;
+    border-radius: 7px;
+    padding: 11px 15px;
+    color: #4c5f50;
+    background: #eef2e9;
   }
 
   .education-rich-text img {
@@ -177,7 +240,6 @@
   }
 
   .education-editor .tiptap {
-    min-height: 270px;
     outline: none;
   }
 
@@ -187,16 +249,17 @@
     color: #849187;
     content: attr(data-placeholder);
     pointer-events: none;
+    font-style: italic;
   }
 
-  .education-editor .tiptap h2,
-  .education-editor .tiptap h3 {
-    margin-block: 1.1em 0.4em;
-    color: var(--forest);
+  .education-editor .tiptap > :first-child {
+    margin-block-start: 0;
   }
 
   .education-editor .tiptap img {
     max-width: 100%;
+    height: auto;
+    margin-block: 0.65em;
     border-radius: 7px;
   }
 }

@@ -2,7 +2,7 @@
 
 import { formatDate, type AidCorrection } from "@/lib/domain";
 import { aidCorrectionSchema } from "@/lib/api-contracts";
-import { StaffHistory } from "./history";
+import { StaffHistory } from "./staff-history";
 
 const labels = {
   allocation: "Koreksi alokasi",
@@ -18,24 +18,25 @@ function describe(value: AidCorrection["current"]) {
   return value.note ? `${description} · ${value.note}` : description;
 }
 
-export function AidCorrectionHistory({ path, revision }: { path: string; revision: string }) {
+export function AidCorrectionHistory({ path }: { path: string }) {
   return (
     <StaffHistory<AidCorrection>
       title="Riwayat koreksi bantuan"
       path={`${path}?history=corrections`}
-      revision={revision}
       schema={aidCorrectionSchema}
       entryKey={(entry) => entry.id}
+      columns={["Perubahan", "Sebelum", "Sesudah", "Alasan", "Petugas", "Waktu"]}
       renderEntry={(entry) => (
-        <div>
-          <strong>{labels[entry.kind]}</strong>
-          <p>Sebelum · {describe(entry.previous)}</p>
-          <p>Sesudah · {describe(entry.current)}</p>
-          <p>Alasan · {entry.reason}</p>
-          <p>
-            {entry.author} · {formatDate(entry.recordedAt)} WIB
-          </p>
-        </div>
+        <>
+          <td>
+            <strong>{labels[entry.kind]}</strong>
+          </td>
+          <td>{describe(entry.previous)}</td>
+          <td>{describe(entry.current)}</td>
+          <td>{entry.reason}</td>
+          <td>{entry.author}</td>
+          <td>{formatDate(entry.recordedAt)} WIB</td>
+        </>
       )}
     />
   );

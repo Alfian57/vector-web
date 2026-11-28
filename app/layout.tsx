@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import { RegisterServiceWorker } from "./_components/register-service-worker";
+import { ToastProvider } from "./_components/toast";
 import { tw } from "@/lib/tw";
 
 const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"], display: "swap" });
@@ -19,7 +20,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="id" className={tw(geist.variable)}>
       <body>
-        {children}
+        <ToastProvider>{children}</ToastProvider>
         <RegisterServiceWorker />
       </body>
     </html>

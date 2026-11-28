@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { accountMenuStyles } from "./account-menu-classes";
+import { avatarStyles } from "./account-menu-classes";
 import { tw } from "@/lib/tw";
 
 export function Avatar({
@@ -15,7 +15,7 @@ export function Avatar({
 }) {
   const [failedSrc, setFailedSrc] = useState("");
   const [defaultAvatarFailed, setDefaultAvatarFailed] = useState(false);
-  const className = `${accountMenuStyles.avatar} ${size === "large" ? accountMenuStyles.avatarLarge : size === "profile" ? accountMenuStyles.avatarProfile : ""}`;
+  const className = `${avatarStyles.avatar} ${size === "large" ? avatarStyles.avatarLarge : size === "profile" ? avatarStyles.avatarProfile : ""}`;
   const defaultAvatar = "/demo-avatars/default.webp";
   const imageSrc = src && failedSrc !== src ? src : defaultAvatarFailed ? "" : defaultAvatar;
 
@@ -25,7 +25,7 @@ export function Avatar({
   }
 
   return (
-    <span className={tw(className)} aria-hidden="true">
+    <span className={tw(`${className} dashboard-avatar`)} aria-hidden="true">
       {imageSrc ? (
         <>
           {/* eslint-disable-next-line @next/next/no-img-element -- Private avatar responses use the current session cookie. */}

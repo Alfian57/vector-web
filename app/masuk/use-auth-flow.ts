@@ -77,7 +77,10 @@ export function useAuthFlow({
     const user = result.data?.user;
     const role = user && "role" in user ? user.role : null;
     const start = role === "admin" ? adminPath : role === "officer" ? officerPath : radarPath;
-    window.location.replace(destination ?? start);
+    const roleDestination = role === "admin" || role === "officer" || role === "farmer"
+      ? dashboardReturnPath(nextPath, role)
+      : undefined;
+    window.location.replace(roleDestination ?? start);
     return true;
   }
 

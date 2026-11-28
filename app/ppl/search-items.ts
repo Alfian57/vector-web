@@ -1,76 +1,100 @@
+"use client";
+
 import { BookOpen, ClipboardList, Megaphone, Package, Radar, UserRound } from "lucide-react";
-import { educationPath, profilePath, radarPath } from "@/lib/routes";
+import {
+  educationPath,
+  officerAidCreateDialogPath,
+  officerAidPath,
+  officerFollowUpDialogPath,
+  officerFollowUpsPath,
+  officerPath,
+  officerReportsPath,
+  profilePath,
+} from "@/lib/routes";
 import type { DashboardSearchItem } from "../_components/use-dashboard-global-search";
 
-export function pplSearchItems(hasSelectedReport: boolean): DashboardSearchItem[] {
-  return [
-    {
-      id: "ppl-map",
-      label: "Peta radar",
-      description: "Lihat sebaran temuan terverifikasi",
-      keywords: "peta kecamatan hama",
-      icon: Radar,
-      href: "#ppl-map",
-    },
-    {
-      id: "ppl-queue",
-      label: "Antrean laporan",
-      description: "Tinjau laporan yang masuk",
-      keywords: "verifikasi petani temuan foto",
-      icon: ClipboardList,
-      href: "#ppl-queue",
-    },
-    ...(hasSelectedReport
-      ? [
-          {
-            id: "ppl-review",
-            label: "Laporan terpilih",
-            description: "Periksa foto, gejala, dan keputusan",
-            keywords: "verifikasi tinjau koreksi",
-            icon: ClipboardList,
-            href: "#ppl-review",
-          },
-        ]
-      : []),
-    {
-      id: "ppl-actions",
-      label: "Siaran dan tindak lanjut",
-      description: "Kirim informasi atau catat penyuluhan",
-      keywords: "operasional petani pesan penyuluhan",
-      icon: Megaphone,
-      href: "#ppl-actions",
-    },
-    {
-      id: "ppl-aid",
-      label: "Alokasi bantuan",
-      description: "Catat alokasi dan penyaluran bantuan",
-      keywords: "pupuk benih kelompok tani",
-      icon: Package,
-      href: "#ppl-aid",
-    },
-    {
-      id: "education",
-      label: "Pusat edukasi",
-      description: "Baca panduan pemantauan tanaman",
-      keywords: "artikel belajar panduan",
-      icon: BookOpen,
-      href: educationPath,
-    },
-    {
-      id: "radar",
-      label: "Radar petani",
-      description: "Buka pemantauan temuan",
-      keywords: "peta laporan petak peringatan",
-      icon: Radar,
-      href: radarPath,
-    },
-    {
-      id: "profile",
-      label: "Profil akun",
-      description: "Ubah nama, foto, dan kata sandi",
-      keywords: "akun pengaturan avatar password",
-      icon: UserRound,
-      href: profilePath,
-    },
-  ];
-}
+export const officerItems = [
+  {
+    id: "ppl-map",
+    label: "Peta radar",
+    shortLabel: "Peta",
+    group: "Pemantauan",
+    icon: Radar,
+    href: officerPath,
+    description: "Lihat sebaran temuan terverifikasi",
+    keywords: "peta kecamatan hama",
+  },
+  {
+    id: "ppl-queue",
+    label: "Antrean laporan",
+    shortLabel: "Laporan",
+    group: "Verifikasi",
+    icon: ClipboardList,
+    href: officerReportsPath,
+    description: "Tinjau laporan yang masuk",
+    keywords: "verifikasi petani temuan foto",
+  },
+  {
+    id: "ppl-actions",
+    label: "Tindak lanjut",
+    group: "Operasional",
+    icon: Megaphone,
+    href: officerFollowUpsPath,
+    description: "Lihat penyuluhan dan bantuan per kecamatan",
+    keywords: "siaran operasional petani",
+  },
+  {
+    id: "ppl-aid",
+    label: "Alokasi bantuan",
+    shortLabel: "Bantuan",
+    group: "Operasional",
+    icon: Package,
+    href: officerAidPath,
+    description: "Lihat alokasi dan penyaluran",
+    keywords: "pupuk benih kelompok tani",
+  },
+] as const;
+
+export const officerSearchItems: readonly DashboardSearchItem[] = [
+  ...officerItems,
+  {
+    id: "broadcast",
+    label: "Kirim siaran",
+    icon: Megaphone,
+    href: officerFollowUpDialogPath("broadcast"),
+    description: "Kirim informasi ke petani di kecamatan",
+    keywords: "pesan notifikasi",
+  },
+  {
+    id: "follow-up",
+    label: "Catat tindak lanjut",
+    icon: ClipboardList,
+    href: officerFollowUpDialogPath("follow-up"),
+    description: "Catat penyuluhan atau bantuan",
+    keywords: "buat catatan kegiatan",
+  },
+  {
+    id: "aid-create",
+    label: "Buat alokasi",
+    icon: Package,
+    href: officerAidCreateDialogPath(),
+    description: "Siapkan alokasi bantuan kecamatan",
+    keywords: "tambah pupuk benih",
+  },
+  {
+    id: "education",
+    label: "Pusat edukasi",
+    icon: BookOpen,
+    href: educationPath,
+    description: "Baca panduan pemantauan tanaman",
+    keywords: "artikel belajar panduan",
+  },
+  {
+    id: "profile",
+    label: "Profil akun",
+    icon: UserRound,
+    href: profilePath,
+    description: "Ubah nama, foto, dan kata sandi",
+    keywords: "akun pengaturan avatar",
+  },
+];

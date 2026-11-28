@@ -1,5 +1,6 @@
 "use client";
 
+import { Map as MapIcon, Satellite } from "lucide-react";
 import { useRef, useState, useSyncExternalStore } from "react";
 import type { DistrictSummary, Position } from "@/lib/domain";
 import type { OfflineMap } from "@/lib/pwa/storage";
@@ -7,7 +8,7 @@ import { useRadarMapFeatures } from "./use-radar-map-features";
 import { useRadarMapInstance } from "./use-radar-map-instance";
 import { useRadarMapProvider, type MapChoice } from "./use-radar-map-provider";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { tw } from "@/lib/tw";
+import { DashboardSkeleton } from "./dashboard-state";
 
 function watchNetwork(update: () => void) {
   window.addEventListener("online", update);
@@ -24,6 +25,8 @@ export function RadarMap({
   offlineMap,
   mapTilerKey,
   selected,
+  focusedDistrict,
+  fitDistricts,
   onPick,
   className,
 }: {
@@ -32,6 +35,8 @@ export function RadarMap({
   offlineMap?: OfflineMap;
   mapTilerKey?: string;
   selected?: Position;
+  focusedDistrict?: string;
+  fitDistricts?: boolean;
   onPick?: (point: Position) => void;
   className?: string;
 }) {
@@ -42,7 +47,7 @@ export function RadarMap({
     () => navigator.onLine,
     () => true,
   );
-  const runtime = useRadarMapInstance({ container, summaries, tileUrl, offlineMap, onPick });
+  const runtime = useRadarMapInstance({ container, summaries, tileUrl, offlineMap, onPick, fitDistricts });
   const { providerState } = useRadarMapProvider({
     mapRef: runtime.map,
     localStyleRef: runtime.localStyle,
@@ -60,6 +65,8 @@ export function RadarMap({
     popupRef: runtime.popup,
     summaries,
     selected,
+    focusedDistrict,
+    fitDistricts,
     ready: runtime.ready,
     tileUrl,
     offlineMap,
@@ -67,48 +74,30 @@ export function RadarMap({
 
   const showSatelliteChoice = online && providerState !== "failed" && choice.mode === "satellite";
   return (
-    <div className={tw(`map-frame ${className ?? ""}`)}>
+    <div className={`map-frame dashboard-map-frame${onPick ? "dashboard-map-frame--picker" : ""} ${className ?? ""}`}>
       <div
         ref={container}
-        className={tw(`map-canvas ${onPick ? "map-picker" : ""}`)}
+        className={`map-canvas dashboard-map-canvas${onPick ? "map-picker" : ""}`}
         aria-label="Peta kecamatan Karawang"
       />
       {mapTilerKey && !runtime.mapIssue && (
-        <div
-          className={tw(
-            "absolute top-2.5 left-2.5 z-[1] flex gap-0.5 rounded-lg border border-[#bbc7b6] bg-[#fffdf5] p-[3px] shadow-[0_2px_8px_#15271d24]",
-          )}
-          role="group"
-          aria-label="Jenis peta"
-        >
-          <button
-            className={tw(
-              "min-h-[37px] rounded-[5px] bg-transparent px-[11px] py-[5px] text-[.78rem] font-[650] text-[#203d37] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#487139] disabled:text-[#5e6b61] disabled:opacity-70 aria-pressed:bg-[#203d37] aria-pressed:text-[#fffdf5]",
-            )}
-            type="button"
-            aria-pressed={!showSatelliteChoice}
-            onClick={() => setChoice({ mode: "map" })}
-          >
-            Peta
+        <div className="dashboard-map-modes" role="group" aria-label="Jenis peta">
+          <button type="button" aria-pressed={!showSatelliteChoice} onClick={() => setChoice({ mode: "map" })}>
+            <MapIcon size={15} aria-hidden="true" /> Peta
           </button>
           <button
-            className={tw(
-              "min-h-[37px] rounded-[5px] bg-transparent px-[11px] py-[5px] text-[.78rem] font-[650] text-[#203d37] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#487139] disabled:text-[#5e6b61] disabled:opacity-70 aria-pressed:bg-[#203d37] aria-pressed:text-[#fffdf5]",
-            )}
             type="button"
             aria-pressed={showSatelliteChoice}
             disabled={!online}
             onClick={() => setChoice({ mode: "satellite" })}
           >
-            Satelit
+            <Satellite size={15} aria-hidden="true" /> Satelit
           </button>
         </div>
       )}
       {providerState === "ready" && (
         <a
-          className={tw(
-            "absolute bottom-[9px] left-[9px] z-[1] h-[26px] w-[82px] rounded-[4px] bg-[#fffdf5] bg-[url(https://api.maptiler.com/resources/logo.svg)] [background-size:68px_auto] bg-center bg-no-repeat focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#487139]",
-          )}
+          className="dashboard-map-provider"
           href="https://www.maptiler.com/"
           target="_blank"
           rel="noreferrer"
@@ -116,26 +105,25 @@ export function RadarMap({
         />
       )}
       {runtime.mapIssue ? (
-        <p className={tw("map-message")} role="status">
+        <p className="dashboard-map-note" role="status">
           Peta memerlukan WebGL. Gunakan daftar temuan atau isi koordinat secara manual.
         </p>
       ) : providerState === "failed" ? (
-        <p className={tw("map-message")} role="status">
+        <p className="dashboard-map-note" role="status">
           {choice.mode === "satellite" ? "Citra satelit belum tersedia." : "Peta online belum tersedia."} Peta Karawang
           ditampilkan.
         </p>
       ) : providerState === "loading" && runtime.ready ? (
-        <p className={tw("map-message")} role="status">
-          {choice.mode === "satellite" ? "Memuat citra satelit…" : "Memuat peta online…"}
-        </p>
+        <DashboardSkeleton
+          kind="map"
+          label={choice.mode === "satellite" ? "Memuat citra satelit…" : "Memuat peta online…"}
+        />
       ) : !runtime.ready ? (
-        <p className={tw("map-message")} role="status">
-          Memuat peta Karawang…
-        </p>
+        <DashboardSkeleton kind="map" label="Memuat peta Karawang…" />
       ) : (
         runtime.tileIssue &&
         providerState !== "ready" && (
-          <p className={tw("map-message")} role="status">
+          <p className="dashboard-map-note" role="status">
             Peta dasar belum dapat dimuat.
           </p>
         )

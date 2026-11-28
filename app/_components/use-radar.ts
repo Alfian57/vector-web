@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiData } from "@/lib/client";
 import { mapPackageSchema, radarSnapshotSchema, weatherSchema } from "@/lib/api-contracts";
 import { districtPath, type MapPackage, type RadarSnapshot, type Weather } from "@/lib/domain";
 import { prepareRadarShell } from "@/lib/pwa/radar-shell";
 import { offlineDb, type OfflineMap } from "@/lib/pwa/storage";
+import { showToast } from "./toast";
 
 export function useRadar(enabled = true) {
   const [radar, setRadar] = useState<RadarSnapshot>();
@@ -17,31 +18,78 @@ export function useRadar(enabled = true) {
   const [radarIssue, setRadarIssue] = useState(false);
   const [weatherIssue, setWeatherIssue] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [packageLoading, setPackageLoading] = useState(true);
+  const [mapResult, setMapResult] = useState<"error">();
+  const pending = useRef<AbortController>(null);
 
   const refresh = useCallback(async () => {
     if (!enabled) return;
-    const [saved, map, snapshot, currentWeather, available] = await Promise.allSettled([
-      offlineDb().snapshots.get("radar"),
-      offlineDb().maps.get("karawang"),
-      apiData("radar", radarSnapshotSchema),
-      apiData("weather", weatherSchema.nullable()),
-      apiData("map-package", mapPackageSchema),
-    ]);
-    const cached = saved.status === "fulfilled" ? saved.value : undefined;
-    const ready = map.status === "fulfilled" ? map.value : undefined;
-    const fresh = snapshot.status === "fulfilled" ? snapshot.value : cached?.radar;
-    const conditions = currentWeather.status === "fulfilled" ? currentWeather.value : (cached?.weather ?? null);
-    setRadar(fresh);
-    setWeather(conditions);
-    setRadarIssue(snapshot.status === "rejected");
-    setWeatherIssue(currentWeather.status === "rejected");
-    setTiles(available.status === "fulfilled" ? available.value : undefined);
-    setOfflineMap((previous) => (previous?.version === ready?.version ? previous : ready));
-    setLoading(false);
-    if (fresh)
-      await offlineDb()
-        .snapshots.put({ key: "radar", radar: fresh, weather: conditions })
-        .catch(() => {});
+    pending.current?.abort();
+    const controller = new AbortController();
+    pending.current = controller;
+    const { signal } = controller;
+    const request = { signal: AbortSignal.any([signal, AbortSignal.timeout(12000)]) };
+    const storage = offlineDb();
+    const cached = storage.snapshots.get("radar").catch(() => undefined);
+    setLoading(true);
+    setWeatherLoading(true);
+    setPackageLoading(true);
+
+    const radarRequest = apiData("radar", radarSnapshotSchema, request)
+      .then((snapshot) => {
+        if (!signal.aborted) {
+          setRadar(snapshot);
+          setRadarIssue(false);
+          setLoading(false);
+        }
+        return snapshot;
+      })
+      .catch(async () => {
+        const snapshot = (await cached)?.radar;
+        if (!signal.aborted) {
+          setRadar((current) => current ?? snapshot);
+          setRadarIssue(true);
+          setLoading(false);
+        }
+        return snapshot;
+      });
+
+    const weatherRequest = apiData("weather", weatherSchema.nullable(), request)
+      .then((conditions) => {
+        if (!signal.aborted) {
+          setWeather(conditions);
+          setWeatherIssue(false);
+          setWeatherLoading(false);
+        }
+        return conditions;
+      })
+      .catch(async () => {
+        const conditions = (await cached)?.weather ?? null;
+        if (!signal.aborted) {
+          setWeather((current) => current ?? conditions);
+          setWeatherIssue(true);
+          setWeatherLoading(false);
+        }
+        return conditions;
+      });
+
+    const mapRequest = Promise.allSettled([
+      storage.maps.get("karawang"),
+      apiData("map-package", mapPackageSchema, request),
+    ]).then(([saved, available]) => {
+      if (signal.aborted) return;
+      if (saved.status === "fulfilled") {
+        setOfflineMap((previous) => (previous?.version === saved.value?.version ? previous : saved.value));
+      }
+      if (available.status === "fulfilled") setTiles(available.value);
+      setPackageLoading(false);
+    });
+
+    const [snapshot, conditions] = await Promise.all([radarRequest, weatherRequest, mapRequest]);
+    if (!signal.aborted && snapshot) {
+      await storage.snapshots.put({ key: "radar", radar: snapshot, weather: conditions }).catch(() => {});
+    }
   }, [enabled]);
 
   useEffect(() => {
@@ -49,6 +97,7 @@ export function useRadar(enabled = true) {
     const initial = setTimeout(refresh, 0);
     window.addEventListener("online", refresh);
     return () => {
+      pending.current?.abort();
       clearTimeout(initial);
       window.removeEventListener("online", refresh);
     };
@@ -57,6 +106,7 @@ export function useRadar(enabled = true) {
   async function saveMap() {
     if (!tiles || mapBusy) return;
     setMapBusy(true);
+    setMapResult(undefined);
     setMapMessage("");
     try {
       if (!navigator.serviceWorker) throw new Error("Service worker unavailable");
@@ -70,15 +120,16 @@ export function useRadar(enabled = true) {
         }),
       ]);
       if (!registration.active) throw new Error("Service worker unavailable");
-      const [response] = await Promise.all([fetch(tiles.url), prepareRadarShell(registration.active)]);
+      const [response] = await Promise.all([fetch(tiles.url), prepareRadarShell(registration.active, true)]);
       if (!response.ok || response.status !== 200) throw new Error("Map unavailable");
       const file = await response.blob();
       if (file.size !== tiles.bytes || (await file.slice(0, 7).text()) !== "PMTiles") throw new Error("Incomplete map");
       const archive: OfflineMap = { key: "karawang", url: tiles.url, version: tiles.version, bytes: tiles.bytes, file };
       await offlineDb().maps.put(archive);
       setOfflineMap(archive);
-      setMapMessage("Peta Karawang siap dibuka offline.");
+      showToast("Peta Karawang siap dibuka offline.");
     } catch {
+      setMapResult("error");
       setMapMessage("Peta belum tersimpan. Periksa koneksi dan ruang penyimpanan.");
     } finally {
       setMapBusy(false);
@@ -95,6 +146,9 @@ export function useRadar(enabled = true) {
     radarIssue,
     weatherIssue,
     loading,
+    weatherLoading,
+    packageLoading,
+    mapResult,
     refresh,
     saveMap,
   };

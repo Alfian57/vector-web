@@ -1,10 +1,14 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useRef } from "react";
+import { useRef, useState } from "react";
+import { Trash2 } from "lucide-react";
 import type { AccountProfile } from "@/lib/domain";
 import { passwordMinimum } from "@/lib/whatsapp";
+import { DashboardConfirmation } from "@/app/_components/dashboard-confirmation";
+import { DashboardSkeleton } from "@/app/_components/dashboard-state";
 import { Avatar } from "@/app/_components/avatar";
+import { ImageDropzone } from "@/app/_components/image-dropzone";
 import { PasswordInput } from "@/app/_components/password-input";
 import { profileStyles as styles } from "./profile-classes";
 import { useProfileSettings } from "./use-profile-settings";
@@ -12,28 +16,22 @@ import { tw } from "@/lib/tw";
 
 const AvatarCropDialog = dynamic(() => import("./avatar-crop-dialog").then((module) => module.AvatarCropDialog), {
   ssr: false,
-  loading: () => (
-    <p className={tw(styles.helper)} role="status">
-      Menyiapkan editor foto…
-    </p>
-  ),
+  loading: () => <DashboardSkeleton label="Menyiapkan editor foto…" kind="crop" />,
 });
 
 export function ProfileForm({ initial }: { initial: AccountProfile }) {
-  const fileRef = useRef<HTMLInputElement>(null);
+  const chooseButton = useRef<HTMLButtonElement>(null);
+  const [confirmAvatarRemoval, setConfirmAvatarRemoval] = useState(false);
   const {
     profile,
     name,
     setName,
     nameBusy,
-    nameMessage,
     nameError,
     cropSource,
     avatarBusy,
-    avatarMessage,
     avatarError,
     passwordBusy,
-    passwordMessage,
     passwordError,
     currentPassword,
     setCurrentPassword,
@@ -49,78 +47,68 @@ export function ProfileForm({ initial }: { initial: AccountProfile }) {
     changePassword,
   } = useProfileSettings(initial);
 
+  async function confirmRemoveAvatar() {
+    if (await removeAvatar()) setConfirmAvatarRemoval(false);
+  }
+
   return (
     <div className={tw(styles.sections)}>
       <section className={tw(styles.card)} aria-labelledby="profile-info-title">
         <header className={tw(styles.cardHeader)}>
           <h2 className={tw(styles.cardTitle)} id="profile-info-title">
-            Informasi profil
+            Identitas dan kontak
           </h2>
-          <p className={tw(styles.cardDescription)}>
-            Perbarui nama dan foto yang tampil di dashboard. Email dan WhatsApp terverifikasi ditampilkan sebagai
-            informasi akun.
-          </p>
         </header>
-        {(avatarMessage || avatarError) && (
-          <p
-            className={tw(`${styles.feedback} ${avatarError ? styles.feedbackError : ""}`)}
-            role={avatarError ? "alert" : "status"}
-          >
-            {avatarError || avatarMessage}
+        {avatarError && !confirmAvatarRemoval && (
+          <p className={tw(`${styles.feedback} ${styles.feedbackError}`)} role="alert">
+            {avatarError}
           </p>
         )}
         <div className={tw(styles.avatarBlock)}>
-          <Avatar name={profile.name} src={profile.image} size="profile" />
-          <div className={tw(styles.avatarActions)}>
-            <strong className={tw(styles.avatarTitle)}>
-              Foto profil <span className={tw("font-normal text-muted")}>(opsional)</span>
-            </strong>
-            <p className={tw(styles.helper)}>JPEG, PNG, atau WebP hingga 5 MB. Foto disimpan sebagai WebP persegi.</p>
-            <label className={tw(styles.hiddenFile)} htmlFor="profile-avatar-file">
-              Pilih foto profil (opsional)
-            </label>
-            <input
-              ref={fileRef}
-              id="profile-avatar-file"
-              className={tw(styles.hiddenFile)}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              aria-describedby="profile-avatar-help"
-              onChange={(event) => {
-                chooseAvatar(event.currentTarget.files?.[0]);
-                event.currentTarget.value = "";
-              }}
-            />
-            <div className={tw(styles.avatarButtons)}>
-              <button
-                className={tw(styles.avatarButton)}
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={avatarBusy}
-              >
-                Pilih atau ganti foto
-              </button>
+          <div className={tw(styles.avatarIdentity)}>
+            <span className="dashboard-profile-avatar-wrap">
+              <Avatar name={profile.name} src={profile.image} size="profile" />
               {profile.image && (
                 <button
                   type="button"
-                  className={tw(`${styles.avatarButton} ${styles.removeButton}`)}
-                  onClick={() => void removeAvatar()}
+                  className="dashboard-profile-avatar-delete"
+                  aria-label="Hapus foto profil"
+                  title="Hapus foto profil"
+                  onClick={() => setConfirmAvatarRemoval(true)}
                   disabled={avatarBusy}
                 >
-                  Hapus foto
+                  <Trash2 aria-hidden="true" size={15} strokeWidth={2} />
                 </button>
               )}
-            </div>
-            <span id="profile-avatar-help" className={tw(styles.helper)}>
-              Foto akan dipotong 1:1; Anda dapat menggeser, memperbesar, dan memutarnya.
             </span>
+            <div className={tw(styles.avatarActions)}>
+              <strong className="dashboard-profile-identity-name">{profile.name}</strong>
+              <p className={tw(styles.helper)}>Foto disimpan sebagai WebP persegi.</p>
+            </div>
           </div>
+          <ImageDropzone
+            inputId="profile-avatar-file"
+            inputLabel="Pilih foto profil"
+            accept="image/jpeg,image/png,image/webp"
+            description="JPEG, PNG, atau WebP · maksimal 5 MB"
+            describedBy="profile-avatar-help"
+            onFile={chooseAvatar}
+            disabled={avatarBusy}
+            triggerButtonRef={chooseButton}
+            className="dashboard-image-dropzone--profile"
+          />
+          <span id="profile-avatar-help" className={tw(styles.helper)}>
+            Foto akan dipotong 1:1; Anda dapat menggeser, memperbesar, dan memutarnya.
+          </span>
         </div>
         <form className={tw(styles.form)} onSubmit={saveName}>
           <label className={tw(styles.field)} htmlFor="profile-name">
-            Nama <span className={tw(styles.required)}>*</span>
+            <span>
+              Nama <span className={tw(styles.required)}>*</span>
+            </span>
             <input
               id="profile-name"
+              aria-invalid={nameError ? true : undefined}
               className={tw(styles.input)}
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -131,33 +119,41 @@ export function ProfileForm({ initial }: { initial: AccountProfile }) {
               placeholder="Contoh: Dewi Lestari"
             />
           </label>
-          {(nameMessage || nameError) && (
-            <p
-              className={tw(`${styles.feedback} ${nameError ? styles.feedbackError : ""}`)}
-              role={nameError ? "alert" : "status"}
-            >
-              {nameError || nameMessage}
+          {nameError && (
+            <p className={tw(`${styles.feedback} ${styles.feedbackError}`)} role="alert">
+              {nameError}
             </p>
           )}
           <button className={tw(styles.button)} type="submit" disabled={nameBusy || name === profile.name}>
             {nameBusy ? "Menyimpan…" : "Simpan nama"}
           </button>
         </form>
-        <div className={tw(styles.readOnly)} aria-label="Informasi kontak hanya-baca">
+        <dl
+          className={tw(`${styles.readOnly} dashboard-profile-reported-contacts`)}
+          aria-label="Informasi kontak hanya-baca"
+        >
           <div className={tw(styles.readOnlyItem)}>
-            <span className={tw(styles.readOnlyLabel)}>Email</span>
-            <strong className={tw(styles.readOnlyValue)}>
-              {profile.email ?? "Belum ditambahkan atau diverifikasi"}
-            </strong>
+            <dt className={tw(styles.readOnlyLabel)}>Email</dt>
+            <dd className={tw(styles.readOnlyValue)}>{profile.email ?? "Belum ditambahkan atau diverifikasi"}</dd>
           </div>
           <div className={tw(styles.readOnlyItem)}>
-            <span className={tw(styles.readOnlyLabel)}>WhatsApp</span>
-            <strong className={tw(styles.readOnlyValue)}>
-              {profile.phoneNumber ?? "Belum terhubung atau diverifikasi"}
-            </strong>
+            <dt className={tw(styles.readOnlyLabel)}>WhatsApp</dt>
+            <dd className={tw(styles.readOnlyValue)}>{profile.phoneNumber ?? "Belum terhubung atau diverifikasi"}</dd>
           </div>
-        </div>
+        </dl>
       </section>
+      {confirmAvatarRemoval && (
+        <DashboardConfirmation
+          title="Hapus foto profil?"
+          description="Foto profil saat ini akan dihapus. Avatar inisial akan digunakan setelahnya."
+          confirmLabel="Hapus foto"
+          pendingLabel="Menghapus…"
+          busy={avatarBusy}
+          issue={avatarError}
+          onCancel={() => setConfirmAvatarRemoval(false)}
+          onConfirm={confirmRemoveAvatar}
+        />
+      )}
 
       <section className={tw(styles.card)} aria-labelledby="profile-password-title">
         <header className={tw(styles.cardHeader)}>
@@ -168,12 +164,9 @@ export function ProfileForm({ initial }: { initial: AccountProfile }) {
             Masukkan kata sandi saat ini untuk mengubahnya. Perangkat lain akan diminta masuk kembali.
           </p>
         </header>
-        {(passwordMessage || passwordError) && (
-          <p
-            className={tw(`${styles.feedback} ${passwordError ? styles.feedbackError : ""}`)}
-            role={passwordError ? "alert" : "status"}
-          >
-            {passwordError || passwordMessage}
+        {passwordError && (
+          <p className={tw(`${styles.feedback} ${styles.feedbackError}`)} role="alert">
+            {passwordError}
           </p>
         )}
         <form className={tw(styles.passwordForm)} onSubmit={changePassword}>
@@ -183,6 +176,7 @@ export function ProfileForm({ initial }: { initial: AccountProfile }) {
             </label>
             <PasswordInput
               id="current-password"
+              aria-invalid={passwordError ? true : undefined}
               className={tw(styles.passwordInput)}
               value={currentPassword}
               onChange={(event) => setCurrentPassword(event.target.value)}
@@ -233,7 +227,13 @@ export function ProfileForm({ initial }: { initial: AccountProfile }) {
         </form>
       </section>
       {cropSource && (
-        <AvatarCropDialog source={cropSource} busy={avatarBusy} onCancel={closeCropper} onSave={saveAvatar} />
+        <AvatarCropDialog
+          source={cropSource}
+          busy={avatarBusy}
+          onCancel={closeCropper}
+          onSave={saveAvatar}
+          finalFocus={chooseButton}
+        />
       )}
     </div>
   );

@@ -1,206 +1,127 @@
 "use client";
 
 import Link from "next/link";
-import { educationPath, officerPath, radarPath, whatsappLinkPath } from "@/lib/routes";
-import { ArrowLeft, BookOpen, Radio } from "lucide-react";
-import { useMemo, useState } from "react";
-import { findings, statuses, type Account } from "@/lib/domain";
-import { Brand } from "../_components/brand";
-import { AccountMenu } from "../_components/account-menu";
-import { FieldLabel } from "../_components/field-label";
-import { Map } from "../_components/map";
-import { ReportList } from "../_components/report-list";
-import { useRadar } from "../_components/use-radar";
-import { ActionsPanel } from "./actions-panel";
-import { AidPanel } from "./aid-panel";
-import { ReviewPanel } from "./review-panel";
-import { usePplDashboard } from "./use-ppl-dashboard";
-import { DashboardGlobalSearch } from "../_components/dashboard-global-search";
+import { useEffect } from "react";
+import { formatDate, type Report } from "@/lib/domain";
+import { reportPageResponseSchema } from "@/lib/api-contracts";
+import { officerReportPath, officerReportsPath } from "@/lib/routes";
 import { tw } from "@/lib/tw";
-import { pplSearchItems } from "./search-items";
+import { DashboardSkeleton, DashboardState } from "../_components/dashboard-state";
+import { DataTable } from "../_components/data-table";
+import { RadarLegend } from "../_components/radar-legend";
+import { Map } from "../_components/map";
+import { useRadar } from "../_components/use-radar";
+import { useOfficerRevision } from "./officer-shell";
+import { useOfficerData } from "./use-ppl-dashboard";
 
-export function Dashboard({ account }: { account: Account }) {
-  const [selected, setSelected] = useState<string>();
-  const [filter, setFilter] = useState("pending");
-  const [finding, setFinding] = useState("");
-  const [page, setPage] = useState(0);
-  const [message, setMessage] = useState("");
-  const radar = useRadar();
-  const { reports, hasMore, live, error, followUps, districts, districtError, revision, load, clearReports } =
-    usePplDashboard({
-      filter,
-      finding,
-      page,
-      refreshRadar: radar.refresh,
-    });
-  const summaries = radar.radar?.summaries;
-  const visible = useMemo(
-    () => (finding ? summaries?.filter((row) => finding === row.finding) : summaries),
-    [finding, summaries],
-  );
-
-  const report = reports?.find((row) => row.id === selected);
-  const searchItems = pplSearchItems(Boolean(report));
-
-  function reviewed() {
-    setMessage("Keputusan verifikasi tersimpan.");
-    setSelected(undefined);
-    void load();
-    void radar.refresh();
-  }
-
-  function changeFilter(set: (input: string) => void, input: string) {
-    set(input);
-    setPage(0);
-    clearReports();
-    setSelected(undefined);
-  }
-
+export function OfficerRadar() {
   return (
-    <div className={tw("officer-layout")}>
-      <header className={tw("officer-top")}>
-        <Brand />
-        <div className={tw("topbar-actions")}>
-          <DashboardGlobalSearch items={searchItems} />
-          <AccountMenu account={account} />
-          {!account.whatsappLinked && (
-            <Link
-              className={tw("text-link small")}
-              href={`${whatsappLinkPath}&next=${encodeURIComponent(officerPath)}`}
-            >
-              Hubungkan WhatsApp
-            </Link>
-          )}
-          <Link className={tw("secondary")} href={educationPath}>
-            <BookOpen size={16} /> Edukasi
-          </Link>
-          <Link className={tw("secondary")} href={radarPath}>
-            <ArrowLeft size={16} /> Radar
-          </Link>
+    <>
+      <header className={tw("page-heading")}>
+        <div>
+          <h1>Dasbor PPL</h1>
+          <p>Verifikasi temuan dan tindak lanjut pemantauan padi di Karawang.</p>
         </div>
       </header>
-      <main className={tw("content")}>
-        <div className={tw("page-heading")}>
-          <div>
-            <h1>Dasbor PPL</h1>
-            <p>Verifikasi temuan dan tindak lanjut pemantauan padi di Karawang.</p>
-          </div>
-          <span className={tw(`connection ${live ? "" : "connection-offline"}`)} role="status">
-            <Radio size={15} /> {live ? "Terhubung langsung" : "Menyambungkan…"}
-          </span>
+      <div className="dashboard-field-workspace">
+        <OfficerMap workspace />
+        <OfficerVerificationPanel />
+      </div>
+    </>
+  );
+}
+
+function OfficerVerificationPanel() {
+  const { data, issue, loading, retry } = useOfficerData(
+    "reports?scope=ppl&status=pending&page=0",
+    reportPageResponseSchema,
+  );
+  const reports = data?.reports.slice(0, 3);
+
+  return (
+    <section
+      className="dashboard-field-overview dashboard-officer-overview"
+      aria-labelledby="officer-verification-title"
+    >
+      <div className="dashboard-officer-queue">
+        <h2 id="officer-verification-title">Antrean verifikasi</h2>
+        <p>Tinjau foto dan lokasi laporan sebelum hasilnya muncul di radar.</p>
+        <Link className={tw("secondary")} href={officerReportsPath}>
+          Buka antrean laporan
+        </Link>
+      </div>
+      <div className="dashboard-field-clusters">
+        {issue && (
+          <DashboardState
+            compact
+            kind="error"
+            title="Antrean belum dapat dimuat"
+            action={
+              <button type="button" className="dashboard-inline-link" onClick={retry}>
+                Coba lagi
+              </button>
+            }
+          />
+        )}
+        {reports?.length ? (
+          <DataTable label="Laporan menunggu verifikasi" columns={["Kecamatan", "Pengamatan"]} busy={loading}>
+            {reports.map((report) => (
+              <tr key={report.id}>
+                <th scope="row">
+                  <Link className="dashboard-district-focus" href={officerReportPath(report.id)}>
+                    {report.districtName}
+                  </Link>
+                </th>
+                <td>{formatDate(report.observedAt)} WIB</td>
+              </tr>
+            ))}
+          </DataTable>
+        ) : loading ? (
+          <DashboardSkeleton kind="table" columns={2} rows={3} label="Memuat antrean laporan…" />
+        ) : !issue ? (
+          <DashboardState compact title="Antrean verifikasi kosong" />
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+export function OfficerMap({
+  selected,
+  finding,
+  workspace = false,
+}: {
+  selected?: Report;
+  finding?: string;
+  workspace?: boolean;
+}) {
+  const revision = useOfficerRevision();
+  const radar = useRadar();
+  const { refresh } = radar;
+  useEffect(() => {
+    if (revision) void refresh();
+  }, [revision, refresh]);
+  const summaries = radar.radar?.summaries;
+
+  return (
+    <section className={tw(`panel dashboard-map-panel ${workspace ? "dashboard-field-map" : ""}`)}>
+      <div className="dashboard-map-heading">
+        <div>
+          <h2>Peta radar</h2>
+          <p>
+            {selected ? `Lokasi laporan di ${selected.districtName}` : "Agregat temuan terverifikasi per kecamatan"}
+          </p>
         </div>
-        {message && (
-          <p className={tw("message")} role="status">
-            {message}
-          </p>
-        )}
-        {error && (
-          <p className={tw("message error-text")} role="alert">
-            {error}
-          </p>
-        )}
-        <div className={tw("radar-grid officer-grid")}>
-          <section id="ppl-map" className={tw("panel radar-panel")}>
-            <div className={tw("panel-heading")}>
-              <div>
-                <h2>Peta radar</h2>
-                <p>
-                  {report
-                    ? `Lokasi laporan yang dipilih di ${report.districtName}`
-                    : "Agregat temuan terverifikasi per kecamatan"}
-                </p>
-              </div>
-            </div>
-            <Map
-              summaries={visible}
-              tileUrl={radar.tiles?.url}
-              mapTilerKey={radar.tiles?.mapTilerKey}
-              offlineMap={radar.offlineMap}
-              selected={report}
-            />
-            <div className={tw("map-footer legend")}>
-              <span>
-                <i className={tw("legend-cluster")} /> Klaster aktif
-              </span>
-              <span>
-                <i className={tw("legend-observed")} /> Sporadis
-              </span>
-            </div>
-          </section>
-          <section id="ppl-queue" className={tw("panel queue-panel")}>
-            <div className={tw("panel-heading")}>
-              <div>
-                <h2>Antrean laporan</h2>
-                <p>Pilih laporan untuk memeriksa foto dan lokasi.</p>
-              </div>
-            </div>
-            <div className={tw("panel-note form-two")}>
-              <label>
-                <FieldLabel>Status laporan</FieldLabel>
-                <select value={filter} onChange={(event) => changeFilter(setFilter, event.target.value)}>
-                  <option value="">Semua status</option>
-                  {Object.entries(statuses).map(([key, label]) => (
-                    <option value={key} key={key}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <FieldLabel>Jenis temuan</FieldLabel>
-                <select value={finding} onChange={(event) => changeFilter(setFinding, event.target.value)}>
-                  <option value="">Semua temuan</option>
-                  {Object.entries(findings).map(([key, label]) => (
-                    <option value={key} key={key}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            {reports ? (
-              <ReportList
-                reports={reports}
-                active={selected}
-                onSelect={(item) => {
-                  setSelected(item.id);
-                  setMessage("");
-                }}
-              />
-            ) : (
-              <p className={tw("empty")}>{error ? "Antrean belum tersedia." : "Memuat laporan…"}</p>
-            )}
-            {(page > 0 || hasMore) && (
-              <div className={tw("panel-note button-row action-row")}>
-                <button className={tw("secondary")} disabled={!page} onClick={() => setPage(page - 1)}>
-                  Sebelumnya
-                </button>
-                <button className={tw("secondary")} disabled={!hasMore} onClick={() => setPage(page + 1)}>
-                  Berikutnya
-                </button>
-              </div>
-            )}
-          </section>
-        </div>
-        {report && (
-          <section id="ppl-review" className={tw("panel")}>
-            <ReviewPanel key={report.id} report={report} onReviewed={reviewed} />
-          </section>
-        )}
-        {districtError && (
-          <p className={tw("message error-text")} role="alert">
-            Daftar kecamatan belum tersedia.
-          </p>
-        )}
-        <ActionsPanel
-          id="ppl-actions"
-          districts={districts}
-          followUps={followUps}
-          revision={revision}
-          onChange={() => void load()}
-        />
-        <AidPanel id="ppl-aid" districts={districts} revision={revision} />
-      </main>
-    </div>
+      </div>
+      <Map
+        summaries={finding ? summaries?.filter((row) => row.finding === finding) : summaries}
+        tileUrl={radar.tiles?.url}
+        mapTilerKey={radar.tiles?.mapTilerKey}
+        offlineMap={radar.offlineMap}
+        selected={selected}
+        fitDistricts={workspace}
+      />
+      <RadarLegend />
+    </section>
   );
 }

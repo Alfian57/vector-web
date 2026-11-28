@@ -9,6 +9,7 @@ const emptyResults: AdminSearchResults = { accounts: [], education: [], logs: []
 
 export function useAdminSearch(open: boolean, query: string) {
   const [searchState, setSearchState] = useState({ query: "", results: emptyResults, loading: false, issue: "" });
+  const [reload, setReload] = useState(0);
   const searchTerm = query.trim();
   const shouldSearch = open && searchTerm.length >= 2;
 
@@ -40,17 +41,16 @@ export function useAdminSearch(open: boolean, query: string) {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [searchTerm, shouldSearch]);
-
-  function clearIssue() {
-    setSearchState((current) => ({ ...current, issue: "" }));
-  }
+  }, [searchTerm, shouldSearch, reload]);
 
   const isCurrentSearch = searchState.query === searchTerm;
   return {
     results: shouldSearch && isCurrentSearch ? searchState.results : emptyResults,
     loading: shouldSearch && (!isCurrentSearch || searchState.loading),
     issue: shouldSearch && isCurrentSearch ? searchState.issue : "",
-    clearIssue,
+    retry: () => {
+      setSearchState({ query: searchTerm, results: emptyResults, loading: true, issue: "" });
+      setReload((value) => value + 1);
+    },
   };
 }

@@ -7,7 +7,7 @@ import {
   listEducationForAdmin,
   saveEducationArticle,
 } from "../education";
-import { uploadEducationImage } from "../education-media";
+import { readEducationSaveRequest, uploadEducationImage } from "../education-media";
 import { json, RequestError } from "../http";
 import type { ApiRouteContext } from "./shared";
 
@@ -31,13 +31,14 @@ export async function handleAdminApi({
   if (segments.length === 2 && segments[1] === "education" && method === "GET")
     return json(await listEducationForAdmin(params));
   if (segments.length === 2 && segments[1] === "education" && method === "POST") {
-    return json(await saveEducationArticle(account, undefined, await request.json()), 201);
+    const { body, images } = await readEducationSaveRequest(request);
+    return json(await saveEducationArticle(account, undefined, body, images), 201);
   }
   if (segments.length === 3 && segments[1] === "education" && method === "GET") {
     return json(await getEducationForAdmin(uuid.parse(segments[2])));
   }
   if (segments.length === 3 && segments[1] === "education" && method === "PATCH") {
-    const body: unknown = await request.json();
+    const { body, images } = await readEducationSaveRequest(request);
     if (typeof body === "object" && body !== null && "action" in body && body.action === "restore") {
       await restoreEducationArticle(account, uuid.parse(segments[2]));
       return json({ ok: true });
@@ -46,7 +47,7 @@ export async function handleAdminApi({
       await archiveEducationArticle(account, uuid.parse(segments[2]));
       return json({ ok: true });
     }
-    return json(await saveEducationArticle(account, uuid.parse(segments[2]), body));
+    return json(await saveEducationArticle(account, uuid.parse(segments[2]), body, images));
   }
   if (segments.length === 3 && segments[1] === "education" && method === "DELETE") {
     await archiveEducationArticle(account, uuid.parse(segments[2]));

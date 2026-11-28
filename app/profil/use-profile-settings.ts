@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { ApiError, api, apiData } from "@/lib/client";
 import { accountProfileSchema, avatarImageResponseSchema } from "@/lib/api-contracts";
 import type { AccountProfile } from "@/lib/domain";
+import { showToast } from "@/app/_components/toast";
 
 const maxAvatarBytes = 5_000_000;
 const allowedAvatarTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -16,14 +17,11 @@ export function useProfileSettings(initial: AccountProfile) {
   const [profile, setProfile] = useState(initial);
   const [name, setName] = useState(initial.name);
   const [nameBusy, setNameBusy] = useState(false);
-  const [nameMessage, setNameMessage] = useState("");
   const [nameError, setNameError] = useState("");
   const [cropSource, setCropSource] = useState<string | null>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
-  const [avatarMessage, setAvatarMessage] = useState("");
   const [avatarError, setAvatarError] = useState("");
   const [passwordBusy, setPasswordBusy] = useState(false);
-  const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -39,7 +37,6 @@ export function useProfileSettings(initial: AccountProfile) {
     if (nameBusy) return;
     setNameBusy(true);
     setNameError("");
-    setNameMessage("");
     try {
       const value = await apiData("profile", accountProfileSchema, {
         method: "PATCH",
@@ -48,7 +45,7 @@ export function useProfileSettings(initial: AccountProfile) {
       });
       setProfile(value);
       setName(value.name);
-      setNameMessage("Nama berhasil diperbarui.");
+      showToast("Nama berhasil diperbarui.");
     } catch (cause) {
       setNameError(errorText(cause, "Nama belum dapat diperbarui."));
     } finally {
@@ -57,7 +54,6 @@ export function useProfileSettings(initial: AccountProfile) {
   }
 
   function chooseAvatar(file?: File) {
-    setAvatarMessage("");
     setAvatarError("");
     if (!file) return;
     if (!allowedAvatarTypes.has(file.type)) {
@@ -79,32 +75,33 @@ export function useProfileSettings(initial: AccountProfile) {
     if (avatarBusy) return;
     setAvatarBusy(true);
     setAvatarError("");
-    setAvatarMessage("");
     try {
       const form = new FormData();
       form.set("image", blob, "avatar.webp");
       const saved = await apiData("profile/avatar", avatarImageResponseSchema, { method: "POST", body: form });
       setProfile((current) => ({ ...current, image: saved.image }));
-      setAvatarMessage("Foto profil berhasil diperbarui.");
+      showToast("Foto profil berhasil diperbarui.");
       closeCropper();
     } catch (cause) {
-      setAvatarError(errorText(cause, "Foto profil belum dapat disimpan."));
+      const message = errorText(cause, "Foto profil belum dapat disimpan.");
+      throw new Error(message);
     } finally {
       setAvatarBusy(false);
     }
   }
 
   async function removeAvatar() {
-    if (avatarBusy || !profile.image) return;
+    if (avatarBusy || !profile.image) return false;
     setAvatarBusy(true);
     setAvatarError("");
-    setAvatarMessage("");
     try {
       await api("profile/avatar", { method: "DELETE" });
       setProfile((current) => ({ ...current, image: null }));
-      setAvatarMessage("Foto profil dihapus. Avatar inisial akan digunakan.");
+      showToast("Foto profil dihapus. Avatar inisial akan digunakan.");
+      return true;
     } catch (cause) {
       setAvatarError(errorText(cause, "Foto profil belum dapat dihapus."));
+      return false;
     } finally {
       setAvatarBusy(false);
     }
@@ -114,7 +111,6 @@ export function useProfileSettings(initial: AccountProfile) {
     event.preventDefault();
     if (passwordBusy) return;
     setPasswordError("");
-    setPasswordMessage("");
     if (newPassword !== confirmPassword) {
       setPasswordError("Konfirmasi kata sandi baru belum cocok.");
       return;
@@ -129,7 +125,7 @@ export function useProfileSettings(initial: AccountProfile) {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setPasswordMessage("Kata sandi diperbarui. Sesi akun di perangkat lain telah diakhiri.");
+      showToast("Kata sandi diperbarui. Sesi akun di perangkat lain telah diakhiri.");
     } catch (cause) {
       setPasswordError(errorText(cause, "Kata sandi belum dapat diperbarui."));
     } finally {
@@ -142,14 +138,11 @@ export function useProfileSettings(initial: AccountProfile) {
     name,
     setName,
     nameBusy,
-    nameMessage,
     nameError,
     cropSource,
     avatarBusy,
-    avatarMessage,
     avatarError,
     passwordBusy,
-    passwordMessage,
     passwordError,
     currentPassword,
     setCurrentPassword,

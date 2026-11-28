@@ -1,4 +1,5 @@
 import { getSchema, type JSONContent } from "@tiptap/core";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type {
   Account,
@@ -9,25 +10,28 @@ import type {
 } from "@/lib/domain";
 import { Prisma } from "../../generated/prisma/client";
 import { educationEditorExtensions } from "@/lib/education-editor-extensions";
+import { supportedEducationFontFamilies } from "@/lib/education-fonts";
+import { educationImageId, educationImageSources, educationImageSrc, mapEducationImageSources } from "@/lib/education-images";
 import { db, transaction } from "./db";
+import { optimizeEducationImage } from "./education-media";
 import { writeActivity } from "./activity-log";
 import { RequestError } from "./http";
+import { dashboardPageSize } from "@/lib/pagination";
 
 const schema = getSchema(educationEditorExtensions);
-const pageSize = 12;
+const pageSize = dashboardPageSize;
 const maxArticleBytes = 100_000;
 const statusSchema = z.enum(["draft", "published"]);
-const educationImagePath =
-  /^\/api\/education\/images\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const articleFields = z.object({
   title: z.string().trim().min(5).max(120),
   category: z.string().trim().min(2).max(50),
   summary: z.string().trim().min(20).max(300),
   content: z.unknown(),
+  thumbnailSrc: z.string().nullable().optional(),
   status: statusSchema.optional(),
 });
 
-function validateDocument(input: unknown): JSONContent {
+function validateDocument(input: unknown, images: ReadonlyMap<string, File>): JSONContent {
   let encoded: string;
   try {
     encoded = JSON.stringify(input);
@@ -45,7 +49,7 @@ function validateDocument(input: unknown): JSONContent {
       if (depth > 32) throw new Error("Document is too deep.");
       if (value.type === "image") {
         const source = value.attrs?.src;
-        if (typeof source !== "string" || !educationImagePath.test(source)) {
+        if (typeof source !== "string" || (!educationImageId(source) && !images.has(source))) {
           throw new Error("Images must use the VEKTOR media endpoint.");
         }
       }
@@ -55,6 +59,14 @@ function validateDocument(input: unknown): JSONContent {
           if (typeof href !== "string") throw new Error("Link is missing a URL.");
           const url = new URL(href);
           if (!["http:", "https:"].includes(url.protocol)) throw new Error("Only HTTP and HTTPS links are allowed.");
+        }
+        if (mark.type === "textStyle" && mark.attrs?.fontFamily != null) {
+          if (
+            typeof mark.attrs.fontFamily !== "string" ||
+            !supportedEducationFontFamilies.has(mark.attrs.fontFamily)
+          ) {
+            throw new Error("Font family is not supported.");
+          }
         }
       }
       for (const child of value.content ?? []) visit(child, depth + 1);
@@ -88,49 +100,56 @@ export async function listPublishedArticles(params: URLSearchParams): Promise<Pa
   const page = pageFrom(params);
   const category = params.get("category")?.trim();
   const query = params.get("q")?.trim().slice(0, 100);
-  const rows = await db().educationArticle.findMany({
-    where: {
-      status: "published",
-      ...(category ? { category: { equals: category.slice(0, 50), mode: "insensitive" as const } } : {}),
-      ...(query
-        ? {
-            OR: [
-              { title: { contains: query, mode: "insensitive" as const } },
-              { summary: { contains: query, mode: "insensitive" as const } },
-            ],
-          }
-        : {}),
-    },
-    select: {
-      id: true,
-      slug: true,
-      title: true,
-      category: true,
-      summary: true,
-      status: true,
-      updatedAt: true,
-      publishedAt: true,
-      author: { select: { name: true } },
-    },
-    orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
-    skip: page * pageSize,
-    take: pageSize + 1,
-  });
+  const where = {
+    status: "published" as const,
+    ...(category ? { category: { equals: category.slice(0, 50), mode: "insensitive" as const } } : {}),
+    ...(query
+      ? {
+          OR: [
+            { title: { contains: query, mode: "insensitive" as const } },
+            { summary: { contains: query, mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+  };
+  const [rows, total] = await Promise.all([
+    db().educationArticle.findMany({
+      where,
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        category: true,
+        summary: true,
+        thumbnailImageId: true,
+        status: true,
+        updatedAt: true,
+        publishedAt: true,
+        author: { select: { name: true } },
+      },
+      orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
+      skip: page * pageSize,
+      take: pageSize + 1,
+    }),
+    db().educationArticle.count({ where }),
+  ]);
   return {
     entries: rows
       .slice(0, pageSize)
-      .map(({ author, id, slug, title, category, summary, status, updatedAt, publishedAt }) => ({
+      .map(({ author, id, slug, title, category, summary, thumbnailImageId, status, updatedAt, publishedAt }) => ({
         id,
         slug,
         title,
         category,
         summary,
+        thumbnailSrc: thumbnailImageId ? educationImageSrc(thumbnailImageId) : null,
         status: status as EducationStatus,
         author: author.name,
         updatedAt: updatedAt.toISOString(),
         publishedAt: publishedAt?.toISOString() ?? null,
       })),
     hasMore: rows.length > pageSize,
+    totalPages: Math.ceil(total / pageSize),
   };
 }
 
@@ -146,6 +165,7 @@ export async function getPublishedArticle(slug: string): Promise<Article> {
     title: row.title,
     category: row.category,
     summary: row.summary,
+    thumbnailSrc: row.thumbnailImageId ? educationImageSrc(row.thumbnailImageId) : null,
     status: row.status as EducationStatus,
     content: row.content as Record<string, unknown>,
     author: row.author.name,
@@ -159,38 +179,45 @@ export async function listEducationForAdmin(params: URLSearchParams): Promise<Pa
   const status = params.get("status");
   if (status && !["draft", "published", "archived"].includes(status))
     throw new RequestError(422, "Filter artikel tidak valid.");
-  const rows = await db().educationArticle.findMany({
-    where: status ? { status } : {},
-    select: {
-      id: true,
-      slug: true,
-      title: true,
-      category: true,
-      summary: true,
-      status: true,
-      updatedAt: true,
-      publishedAt: true,
-      author: { select: { name: true } },
-    },
-    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-    skip: page * pageSize,
-    take: pageSize + 1,
-  });
+  const where = status ? { status } : {};
+  const [rows, total] = await Promise.all([
+    db().educationArticle.findMany({
+      where,
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        category: true,
+        summary: true,
+        thumbnailImageId: true,
+        status: true,
+        updatedAt: true,
+        publishedAt: true,
+        author: { select: { name: true } },
+      },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      skip: page * pageSize,
+      take: pageSize + 1,
+    }),
+    db().educationArticle.count({ where }),
+  ]);
   return {
     entries: rows
       .slice(0, pageSize)
-      .map(({ author, id, slug, title, category, summary, status, updatedAt, publishedAt }) => ({
+      .map(({ author, id, slug, title, category, summary, thumbnailImageId, status, updatedAt, publishedAt }) => ({
         id,
         slug,
         title,
         category,
         summary,
+        thumbnailSrc: thumbnailImageId ? educationImageSrc(thumbnailImageId) : null,
         status: status as EducationStatus,
         author: author.name,
         updatedAt: updatedAt.toISOString(),
         publishedAt: publishedAt?.toISOString() ?? null,
       })),
     hasMore: rows.length > pageSize,
+    totalPages: Math.ceil(total / pageSize),
   };
 }
 
@@ -206,6 +233,7 @@ export async function getEducationForAdmin(id: string): Promise<Article> {
     title: row.title,
     category: row.category,
     summary: row.summary,
+    thumbnailSrc: row.thumbnailImageId ? educationImageSrc(row.thumbnailImageId) : null,
     status: row.status as EducationStatus,
     content: row.content as Record<string, unknown>,
     author: row.author.name,
@@ -214,11 +242,33 @@ export async function getEducationForAdmin(id: string): Promise<Article> {
   };
 }
 
-export async function saveEducationArticle(actor: Account, id: string | undefined, body: unknown) {
+export async function saveEducationArticle(
+  actor: Account,
+  id: string | undefined,
+  body: unknown,
+  images: ReadonlyMap<string, File>,
+) {
   const parsed = articleFields.parse(body);
-  const content = validateDocument(parsed.content);
+  const document = validateDocument(parsed.content, images);
+  const thumbnail = parsed.thumbnailSrc;
+  if (typeof thumbnail === "string" && !educationImageId(thumbnail) && !images.has(thumbnail)) {
+    throw new RequestError(422, "Thumbnail artikel tidak valid. Pilih kembali gambar.");
+  }
+  const linkedSources = new Set(educationImageSources(document));
+  if (thumbnail) linkedSources.add(thumbnail);
+  const uploads = new Map<string, { id: string; media: Awaited<ReturnType<typeof optimizeEducationImage>> }>();
+  for (const [source, file] of images) {
+    if (!linkedSources.has(source)) throw new RequestError(422, "Gambar baru harus digunakan di artikel.");
+    uploads.set(source, { id: randomUUID(), media: await optimizeEducationImage(file) });
+  }
+  function resolveId(source: string) {
+    const imageId = uploads.get(source)?.id ?? educationImageId(source);
+    if (!imageId) throw new RequestError(422, "Referensi gambar artikel tidak valid.");
+    return imageId;
+  }
+  const content = mapEducationImageSources(document, (source) => educationImageSrc(resolveId(source)));
+  const imageIds = new Set(Array.from(linkedSources, resolveId));
   const status = parsed.status ?? "draft";
-  const slug = id ? undefined : slugFor(parsed.title);
   try {
     return await transaction(async (client) => {
       const current = id ? await client.educationArticle.findUnique({ where: { id } }) : null;
@@ -237,11 +287,11 @@ export async function saveEducationArticle(actor: Account, id: string | undefine
               publishedAt,
               updatedAt: new Date(),
             },
-            select: { id: true, slug: true, status: true },
+            select: { id: true, slug: true, status: true, thumbnailImageId: true },
           })
         : await client.educationArticle.create({
             data: {
-              slug: slug!,
+              slug: slugFor(parsed.title),
               title: parsed.title,
               category: parsed.category,
               summary: parsed.summary,
@@ -250,29 +300,42 @@ export async function saveEducationArticle(actor: Account, id: string | undefine
               authorId: actor.id,
               publishedAt,
             },
-            select: { id: true, slug: true, status: true },
+            select: { id: true, slug: true, status: true, thumbnailImageId: true },
           });
-      const imageIds = new Set<string>();
-      const collectImages = (value: JSONContent) => {
-        if (value.type === "image" && typeof value.attrs?.src === "string") {
-          const match = value.attrs.src.match(
-            /^\/api\/education\/images\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i,
-          );
-          if (match) imageIds.add(match[1]);
-        }
-        for (const child of value.content ?? []) collectImages(child);
-      };
-      collectImages(content);
-      if (imageIds.size) {
-        const ownedImages = await client.educationImage.count({
-          where: { articleId: article.id, id: { in: [...imageIds] } },
+      const thumbnailImageId = thumbnail === undefined ? article.thumbnailImageId : thumbnail && resolveId(thumbnail);
+      const retained = new Set(imageIds);
+      if (thumbnailImageId) retained.add(thumbnailImageId);
+      if (uploads.size) {
+        await client.educationImage.createMany({
+          data: Array.from(uploads.values(), ({ id: imageId, media }) => ({ id: imageId, articleId: article.id, ...media })),
         });
-        if (ownedImages !== imageIds.size)
+      }
+      if (retained.size) {
+        const ownedImages = await client.educationImage.count({
+          where: { articleId: article.id, id: { in: [...retained] } },
+        });
+        if (ownedImages !== retained.size)
           throw new RequestError(422, "Gunakan hanya gambar yang diunggah untuk artikel ini.");
       }
+      if (thumbnailImageId !== article.thumbnailImageId) {
+        await client.educationArticle.update({ where: { id: article.id }, data: { thumbnailImageId } });
+      }
       await client.educationImage.deleteMany({
-        where: imageIds.size ? { articleId: article.id, id: { notIn: [...imageIds] } } : { articleId: article.id },
+        where: retained.size ? { articleId: article.id, id: { notIn: [...retained] } } : { articleId: article.id },
       });
+      if (uploads.size) {
+        await writeActivity(
+          {
+            category: "education",
+            action: "education.image.uploaded",
+            actor,
+            targetType: "education_article",
+            targetId: article.id,
+            summary: "Gambar artikel diunggah.",
+          },
+          client,
+        );
+      }
       await writeActivity(
         {
           category: "education",
@@ -297,7 +360,13 @@ export async function saveEducationArticle(actor: Account, id: string | undefine
           client,
         );
       }
-      return article;
+      return {
+        id: article.id,
+        slug: article.slug,
+        status: article.status,
+        thumbnailSrc: thumbnailImageId ? educationImageSrc(thumbnailImageId) : null,
+        imageSources: Object.fromEntries(Array.from(uploads, ([source, upload]) => [source, educationImageSrc(upload.id)])),
+      };
     });
   } catch (error) {
     if (error instanceof RequestError) throw error;

@@ -1,15 +1,21 @@
 "use client";
 
-import { useState } from "react";
 import { StaffHistoryEntries, type HistoryEntriesProps } from "./staff-history-entries";
 import { tw } from "@/lib/tw";
 
-export function StaffHistory<T>({ title, ...props }: HistoryEntriesProps<T> & { title: string }) {
-  const [open, setOpen] = useState(false);
+export function StaffHistory<T>({
+  title,
+  className,
+  ...props
+}: Omit<HistoryEntriesProps<T>, "label"> & { title: string; className?: string }) {
   return (
-    <details className={tw("staff-history")} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>{title}</summary>
-      {open && <StaffHistoryEntries {...props} />}
-    </details>
+    <section className={`dashboard-table-section${className ? ` ${className}` : ""}`} aria-label={title}>
+      <header className="dashboard-table-heading">
+        <h2>{title}</h2>
+      </header>
+      <div className={tw("panel")}>
+        <StaffHistoryEntries label={title} {...props} />
+      </div>
+    </section>
   );
 }
