@@ -14,6 +14,12 @@ Periksa navigasi keyboard, focus terlihat, dan label kontrol aksesibel.
 
 - Gambar informatif memiliki teks alternatif; gambar dekoratif tidak menambah noise pembaca layar.
 
+## Feedback transien
+
+- Hasil berhasil dan informasi singkat setelah tindakan memakai `showToast` dari `app/_components/toast.tsx`. Toast tampil di kanan bawah, diumumkan oleh Base UI, dan dapat ditutup.
+
+- Error validasi dan error yang perlu segera diperbaiki tetap ditampilkan dekat field atau dialog terkait agar konteks input tidak hilang.
+
 
 ## Keyboard, fokus, dan visual
 

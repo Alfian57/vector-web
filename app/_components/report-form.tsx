@@ -1,10 +1,11 @@
 "use client";
 
-import { Camera, ImagePlus, Save } from "lucide-react";
-import { useId } from "react";
+import { Camera, Save } from "lucide-react";
+import { useId, useRef } from "react";
 import { findings, type MapPackage } from "@/lib/domain";
 import type { OfflineMap, QueuedReport } from "@/lib/pwa/storage";
 import { FieldLabel } from "./field-label";
+import { ImageDropzone } from "./image-dropzone";
 import { LocationFields } from "./location-fields";
 import { useReportForm } from "./use-report-form";
 import { tw } from "@/lib/tw";
@@ -19,56 +20,74 @@ export function ReportForm({
   tiles,
   offlineMap,
   edit,
+  variant = "page",
   onSaved,
 }: {
   ownerId: string;
   tiles?: MapPackage;
   offlineMap?: OfflineMap;
   edit?: QueuedReport;
+  variant?: "page" | "dialog";
   onSaved: () => void;
 }) {
   const photoHint = useId();
   const dateHint = useId();
-  const { photo, preview, coordinates, setCoordinates, error, busy, processing, choosePhoto, submit } = useReportForm({
+  const issueId = useId();
+  const photoTriggerButton = useRef<HTMLButtonElement>(null);
+  const { photo, preview, coordinates, setCoordinates, issue, busy, processing, choosePhoto, submit } = useReportForm({
     ownerId,
     edit,
     onSaved,
+    photoTriggerButton,
   });
 
+  const photoIssue = issue?.field === "photo" ? issue : undefined;
+  const dateIssue = issue?.field === "date" ? issue : undefined;
+
   return (
-    <form className={tw("panel field-form")} onSubmit={submit}>
-      <h2>{edit ? "Perbaiki laporan" : "Catat temuan padi"}</h2>
+    <form className={tw(variant === "dialog" ? "field-form" : "panel field-form")} onSubmit={submit}>
+      {variant === "page" && <h1>{edit ? "Perbaiki laporan" : "Catat temuan padi"}</h1>}
       <fieldset>
         <legend>
           <FieldLabel required>Foto daun</FieldLabel>
           <span className={tw("sr-only")}> (wajib)</span>
         </legend>
         <p className={tw("field-hint")} id={photoHint}>
-          Ambil satu foto daun atau pilih foto dari galeri.
+          Seret foto daun ke area ini, pilih dari galeri, atau gunakan kamera.
         </p>
-        <div className={tw("button-row")}>
-          <label className={tw("secondary file-button")}>
-            <Camera size={17} /> Ambil foto
+        <ImageDropzone
+          inputId={`report-photo-${photoHint}`}
+          inputLabel="Pilih foto daun"
+          accept="image/jpeg,image/png,image/webp,image/heic"
+          description="JPEG, PNG, WebP, atau HEIC · maksimal 20 MB"
+          describedBy={photoIssue ? `${photoHint} ${issueId}` : photoHint}
+          invalid={Boolean(photoIssue)}
+          disabled={busy || processing}
+          onFile={(file) => void choosePhoto(file)}
+          triggerButtonRef={photoTriggerButton}
+          className="dashboard-image-dropzone--report"
+        >
+          <label className={tw("secondary file-button dashboard-image-dropzone-camera")}>
+            <Camera size={16} aria-hidden="true" /> Ambil foto
             <input
               type="file"
-              aria-describedby={photoHint}
-              accept="image/*"
-              capture="environment"
-              disabled={processing}
-              onChange={(event) => void choosePhoto(event.target.files?.[0])}
-            />
-          </label>
-          <label className={tw("secondary file-button")}>
-            <ImagePlus size={17} /> Pilih dari galeri
-            <input
-              type="file"
-              aria-describedby={photoHint}
+              aria-describedby={photoIssue ? `${photoHint} ${issueId}` : photoHint}
+              aria-invalid={photoIssue ? true : undefined}
               accept="image/jpeg,image/png,image/webp,image/heic"
-              disabled={processing}
-              onChange={(event) => void choosePhoto(event.target.files?.[0])}
+              capture="environment"
+              disabled={busy || processing}
+              onChange={(event) => {
+                void choosePhoto(event.currentTarget.files?.[0]);
+                event.currentTarget.value = "";
+              }}
             />
           </label>
-        </div>
+        </ImageDropzone>
+        {photoIssue && (
+          <p id={issueId} className={tw("error-text")} role="alert">
+            {photoIssue.message}
+          </p>
+        )}
         {processing && <p role="status">Memproses foto…</p>}
         {photo && (
           <>
@@ -88,13 +107,19 @@ export function ReportForm({
               type="datetime-local"
               name="observedAt"
               required
-              aria-describedby={dateHint}
+              aria-describedby={dateIssue ? `${dateHint} ${issueId}` : dateHint}
+              aria-invalid={dateIssue ? true : undefined}
               defaultValue={localDate(edit?.report.observedAt)}
             />
           </label>
           <p className={tw("field-hint")} id={dateHint}>
             Pilih tanggal dan jam saat temuan diamati.
           </p>
+          {dateIssue && (
+            <p id={issueId} className={tw("error-text")} role="alert">
+              {dateIssue.message}
+            </p>
+          )}
         </div>
         <label>
           <FieldLabel>Dugaan temuan</FieldLabel>
@@ -120,10 +145,16 @@ export function ReportForm({
           placeholder="Contoh: bercak terlihat di tiga rumpun."
         />
       </label>
-      <LocationFields value={coordinates} onChange={setCoordinates} tiles={tiles} offlineMap={offlineMap} />
-      {error && (
+      <LocationFields
+        value={coordinates}
+        onChange={setCoordinates}
+        tiles={tiles}
+        offlineMap={offlineMap}
+        error={issue?.field === "location" ? issue.message : undefined}
+      />
+      {issue?.field === "form" && (
         <p className={tw("error-text")} role="alert">
-          {error}
+          {issue.message}
         </p>
       )}
       <button className={tw("primary")} disabled={busy || processing}>

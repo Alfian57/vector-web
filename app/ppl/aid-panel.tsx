@@ -1,154 +1,155 @@
 "use client";
 
-import { Package } from "lucide-react";
-import { useEffect, useState } from "react";
-import { apiData, errorMessage } from "@/lib/client";
+import { useSearchParams } from "next/navigation";
+import { useEffect } from "react";
 import { aidAllocationsSchema } from "@/lib/api-contracts";
-import { type AidAllocations, type District } from "@/lib/domain";
-import { AidForm } from "./aid-form";
-import { AllocationFields } from "./aid-corrections";
-import { AllocationHistory } from "./allocation-history";
-import { HistoryPages } from "./history";
+import { officerAidCreateDialogPath, officerAidPath, officerAllocationPath } from "@/lib/routes";
 import { tw } from "@/lib/tw";
+import { DashboardFormDialog } from "../_components/dashboard-form-dialog";
+import { DashboardSkeleton, DashboardState } from "../_components/dashboard-state";
+import { DataTable } from "../_components/data-table";
+import { ActionIcon } from "../_components/action-icon";
+import { Pagination } from "../_components/pagination";
+import { AidCreateForm } from "./aid-route-form";
+import { useOfficerData } from "./use-ppl-dashboard";
+import { normalizeBrowserPage, pageQueryValue, parsePageIndex, patchBrowserQuery } from "@/lib/query-state";
 
-const path = "ppl/aid-allocations";
 const number = new Intl.NumberFormat("id-ID");
 
-export function AidPanel({ id, districts, revision }: { id: string; districts: District[]; revision: string }) {
-  const [page, setPage] = useState(0);
-  const [data, setData] = useState<AidAllocations>();
-  const [issue, setIssue] = useState("");
-  const [reload, setReload] = useState(0);
-  const [selected, setSelected] = useState<string>();
+export function AidPanel() {
+  const search = useSearchParams();
+  const rawDialog = search.get("dialog");
+  const dialog = rawDialog === "create" ? "create" : null;
+  const rawPage = search.get("page");
+  const page = parsePageIndex(rawPage);
+  const { data, issue, retry, loading } = useOfficerData(`ppl/aid-allocations?page=${page}`, aidAllocationsSchema);
+  const currentPage =
+    data?.totalPages === undefined ? page : data.totalPages > 0 ? Math.min(page, data.totalPages - 1) : 0;
 
   useEffect(() => {
-    const controller = new AbortController();
-    const { signal } = controller;
-    void apiData(`${path}?page=${page}`, aidAllocationsSchema, { signal })
-      .then((value) => {
-        if (!signal.aborted) {
-          setData(value);
-          setIssue("");
-        }
-      })
-      .catch((error) => {
-        if (!signal.aborted) setIssue(errorMessage(error));
-      });
-    return () => controller.abort();
-  }, [page, revision, reload]);
+    normalizeBrowserPage("page", rawPage, page);
+  }, [page, rawPage]);
 
-  function refresh() {
-    setReload((value) => value + 1);
+  useEffect(() => {
+    if (data) normalizeBrowserPage("page", rawPage, currentPage);
+  }, [currentPage, data, rawPage]);
+
+  useEffect(() => {
+    if (rawDialog && !dialog) patchBrowserQuery({ dialog: null }, "replace");
+  }, [dialog, rawDialog]);
+
+  function changeDialog(open: boolean) {
+    patchBrowserQuery({ dialog: open ? "create" : null }, open ? "push" : "replace");
   }
 
   return (
-    <section id={id} className={tw("panel aid-panel")} aria-labelledby="aid-title">
-      <div className={tw("panel-heading")}>
-        <div className={tw("section-title")}>
-          <Package size={21} />
-          <h2 id="aid-title">Alokasi bantuan</h2>
+    <>
+      <div className={tw("page-heading")}>
+        <div>
+          <h1>Alokasi bantuan</h1>
+          <p>Pantau alokasi dan penyaluran per kecamatan.</p>
         </div>
-      </div>
-      <div className={tw("aid-grid")}>
-        <AidForm
-          path={path}
-          button="Simpan alokasi"
-          success="Alokasi bantuan tersimpan."
-          disabled={!districts.length}
-          onSaved={() => {
-            if (page) {
-              setPage(0);
-              setData(undefined);
-            }
-            refresh();
-          }}
+        <DashboardFormDialog
+          open={dialog === "create"}
+          onOpenChange={changeDialog}
+          trigger={
+            <button type="button" className={tw("primary")}>
+              Buat alokasi
+            </button>
+          }
+          title="Buat alokasi"
+          description="Catat barang bantuan dan jumlah yang dialokasikan ke kecamatan."
         >
-          <h3>Buat alokasi</h3>
-          <AllocationFields districts={districts} />
-        </AidForm>
-        <div className={tw("aid-allocations")}>
-          <h3 className={tw("panel-note")}>Daftar alokasi</h3>
-          {issue && (
-            <p className={tw("panel-note error-text")} role="alert">
-              {issue}{" "}
-              <button className={tw("text-link")} onClick={refresh}>
-                Coba lagi
-              </button>
-            </p>
-          )}
-          {data ? (
-            data.allocations.length ? (
-              <ul className={tw("list aid-list")}>
-                {data.allocations.map((allocation) => {
-                  const remaining = allocation.quantity - allocation.deliveredQuantity;
-                  const expanded = selected === allocation.id;
-                  const status =
-                    remaining === 0
-                      ? "Selesai"
-                      : remaining === allocation.quantity
-                        ? "Direncanakan"
-                        : "Penyaluran sebagian";
-                  return (
-                    <li key={allocation.id}>
-                      <div className={tw("aid-row")}>
-                        <div>
-                          <strong>{allocation.item}</strong>
-                          <p>{allocation.districtName}</p>
-                          <p>
-                            {number.format(allocation.deliveredQuantity)} dari {number.format(allocation.quantity)}{" "}
-                            {allocation.unit} disalurkan
-                          </p>
-                          <p>
-                            Sisa {number.format(remaining)} {allocation.unit}
-                          </p>
-                          {allocation.note && <p>{allocation.note}</p>}
-                        </div>
-                        <div className={tw("aid-controls")}>
-                          <span className={tw("tag")}>{status}</span>
-                          <button
-                            className={tw("secondary")}
-                            aria-expanded={expanded}
-                            aria-controls={expanded ? `aid-${allocation.id}` : undefined}
-                            aria-label={`${expanded ? "Tutup" : "Lihat"} penyaluran ${allocation.item}`}
-                            onClick={() => setSelected(expanded ? undefined : allocation.id)}
-                          >
-                            {expanded ? "Tutup" : "Lihat penyaluran"}
-                          </button>
-                        </div>
-                      </div>
-                      {expanded && (
-                        <AllocationHistory
-                          allocation={allocation}
-                          districts={districts}
-                          revision={revision}
-                          onDelivery={refresh}
-                        />
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className={tw("empty")}>Belum ada alokasi bantuan.</p>
-            )
-          ) : (
-            !issue && (
-              <p className={tw("empty")} role="status">
-                Memuat alokasi…
-              </p>
-            )
-          )}
-          <HistoryPages
-            page={page}
-            hasMore={data?.hasMore}
-            onPage={(next) => {
-              setPage(next);
-              setSelected(undefined);
-              setData(undefined);
+          <AidCreateForm
+            onSaved={() => {
+              retry();
+              changeDialog(false);
             }}
           />
-        </div>
+        </DashboardFormDialog>
       </div>
-    </section>
+      <section className={tw("panel")}>
+        {issue && (
+          <DashboardState
+            compact
+            kind="error"
+            title="Data belum dapat diperbarui"
+            description={issue}
+            action={
+              <button className={tw("secondary")} onClick={retry}>
+                Coba lagi
+              </button>
+            }
+          />
+        )}
+        {data?.allocations.length ? (
+          <DataTable
+            label="Daftar alokasi"
+            columns={[
+              "Barang",
+              "Kecamatan",
+              { label: "Alokasi", numeric: true },
+              { label: "Disalurkan", numeric: true },
+              { label: "Sisa", numeric: true },
+              "Status",
+              "Catatan",
+              "Aksi",
+            ]}
+            busy={loading}
+          >
+            {data.allocations.map((allocation) => {
+              const remaining = allocation.quantity - allocation.deliveredQuantity;
+              const status =
+                remaining === 0 ? "Selesai" : allocation.deliveredQuantity ? "Penyaluran sebagian" : "Direncanakan";
+              return (
+                <tr key={allocation.id}>
+                  <td>
+                    <strong>{allocation.item}</strong>
+                  </td>
+                  <td>{allocation.districtName}</td>
+                  <td className="dashboard-table-number">
+                    {number.format(allocation.quantity)} {allocation.unit}
+                  </td>
+                  <td className="dashboard-table-number">
+                    {number.format(allocation.deliveredQuantity)} {allocation.unit}
+                  </td>
+                  <td className="dashboard-table-number">
+                    {number.format(remaining)} {allocation.unit}
+                  </td>
+                  <td>
+                    <span className={tw("tag")}>{status}</span>
+                  </td>
+                  <td>{allocation.note || "—"}</td>
+                  <td>
+                    <ActionIcon
+                      href={officerAllocationPath(allocation.id)}
+                      label="Lihat penyaluran"
+                      icon="eye"
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </DataTable>
+        ) : loading ? (
+          <DashboardSkeleton kind="table" columns={8} label="Memuat alokasi…" />
+        ) : (
+          !issue && (
+            <DashboardState
+              title="Belum ada alokasi bantuan"
+              description="Alokasi yang dibuat petugas akan muncul di sini."
+            />
+          )
+        )}
+        <Pagination
+          label="Halaman alokasi bantuan"
+          page={currentPage}
+          hasNext={data?.hasMore ?? false}
+          totalPages={data?.totalPages}
+          busy={loading}
+          onPage={(next) => patchBrowserQuery({ page: pageQueryValue(next) })}
+        />
+      </section>
+    </>
   );
 }

@@ -49,7 +49,7 @@ export async function handleOfficerApi({
       const created = await broadcast(account.id, await request.json());
       return json({ ok: true }, created ? 201 : 200);
     }
-    if (id === "follow-ups" && method === "GET") return json(await listFollowUps());
+    if (id === "follow-ups" && method === "GET") return json(await listFollowUps(pageNumber(params)));
     if (id === "follow-ups" && method === "PUT") {
       await writeFollowUp(account.id, await request.json());
       return json({ ok: true });

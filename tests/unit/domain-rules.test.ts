@@ -17,7 +17,10 @@ import {
   officerPath,
   profilePath,
   radarPath,
-  radarSection,
+  radarScreen,
+  radarReportEditPath,
+  officerReportPath,
+  adminArticleEditPath,
   radarSectionPath,
   signInFor,
 } from "../../lib/routes";
@@ -155,15 +158,29 @@ describe("domain boundaries and validation", () => {
   });
 
   test("resolves safe radar routes and rejects external return paths", () => {
-    expect(radarSection("alerts")).toBe("alerts");
-    expect(radarSection("unknown-view")).toBe("radar");
+    expect(radarScreen("/radar/alerts")).toEqual({ section: "radar" });
+    expect(radarScreen("/radar/unknown")).toBeUndefined();
+    expect(radarScreen(radarReportEditPath(sampleId))).toEqual({ section: "edit", id: sampleId });
     expect(radarSectionPath("radar")).toBe("/radar");
-    expect(radarSectionPath("reports")).toBe("/radar?view=reports");
-    expect(signInFor("/radar?view=alerts")).toBe("/masuk?next=%2Fradar%3Fview%3Dalerts");
+    expect(radarSectionPath("reports")).toBe("/radar/reports");
+    expect(signInFor("/radar/alerts")).toBe("/masuk?next=%2Fradar%2Falerts");
     expect(dashboardReturnPath(officerPath)).toBe(officerPath);
     expect(dashboardReturnPath(radarPath)).toBe(radarPath);
     expect(dashboardReturnPath(profilePath)).toBe(profilePath);
-    expect(dashboardReturnPath("/radar?view=alerts")).toBe("/radar?view=alerts");
+    expect(dashboardReturnPath("/radar?view=alerts")).toBe("/radar");
+    expect(dashboardReturnPath("/radar?view=create")).toBe("/radar/reports");
+    expect(dashboardReturnPath(`${officerReportPath(sampleId)}?status=verified&page=1`)).toBe(
+      `${officerReportPath(sampleId)}?status=verified&page=1`,
+    );
+    const allocationDetail = `/ppl/aid-allocations/${sampleId}`;
+    expect(dashboardReturnPath(allocationDetail)).toBe(allocationDetail);
+    expect(dashboardReturnPath(`/admin/education?article=${sampleId}`)).toBe(adminArticleEditPath(sampleId));
+    for (const invalid of [
+      "/ppl/reports/../../api/session",
+      "/radar/%2F%2Fevil.example",
+      "/radar/reports/garbage/edit",
+    ])
+      expect(dashboardReturnPath(invalid)).toBeUndefined();
     expect(dashboardReturnPath("https://evil.example/")).toBeUndefined();
     expect(dashboardReturnPath("//evil.example")).toBeUndefined();
   });

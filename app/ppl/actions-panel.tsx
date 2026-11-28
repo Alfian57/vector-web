@@ -1,203 +1,161 @@
 "use client";
 
-import { Megaphone } from "lucide-react";
-import { useRef, useState, type FormEvent } from "react";
-import { api, errorMessage, jsonRequest } from "@/lib/client";
-import { FieldLabel } from "../_components/field-label";
-import { formatDate, type District, type FollowUp, type FollowUpEntry } from "@/lib/domain";
-import { followUpEntrySchema } from "@/lib/api-contracts";
-import { StaffHistory } from "./history";
+import { useSearchParams } from "next/navigation";
+import { useEffect } from "react";
+import { formatDate, type FollowUp, type FollowUpEntry } from "@/lib/domain";
+import { followUpEntrySchema, followUpSchema, pageSchema } from "@/lib/api-contracts";
+import { officerFollowUpsPath } from "@/lib/routes";
 import { tw } from "@/lib/tw";
+import { DashboardSkeleton, DashboardState } from "../_components/dashboard-state";
+import { DashboardFormDialog } from "../_components/dashboard-form-dialog";
+import { DataTable } from "../_components/data-table";
+import { Pagination } from "../_components/pagination";
+import { FollowUpForm } from "./follow-up-form";
+import { StaffHistory } from "./staff-history";
+import { useOfficerData } from "./use-ppl-dashboard";
+import { normalizeBrowserPage, pageQueryValue, parsePageIndex, patchBrowserQuery } from "@/lib/query-state";
 
-export function ActionsPanel({
-  id,
-  districts,
-  followUps,
-  revision,
-  onChange,
-}: {
-  id: string;
-  districts: District[];
-  followUps: FollowUp[];
-  revision: string;
-  onChange: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [issue, setIssue] = useState("");
-  const [notice, setNotice] = useState("");
-  const [saved, setSaved] = useState(0);
-  const attempts = useRef<Partial<Record<"broadcast" | "follow-up", { payload: string; id: string }>>>({});
+const followUpsSchema = pageSchema(followUpSchema);
+const columns = ["Kecamatan", "Jenis", "Status", "Catatan", "Waktu"];
 
-  async function submit(event: FormEvent<HTMLFormElement>, broadcast: boolean) {
-    event.preventDefault();
-    if (busy) return;
-    const form = event.currentTarget;
-    setBusy(true);
-    setNotice("");
-    setIssue("");
-    try {
-      const input = Object.fromEntries(new FormData(form));
-      const kind = broadcast ? "broadcast" : "follow-up";
-      const payload = JSON.stringify(input);
-      const previous = attempts.current[kind];
-      const id = previous?.payload === payload ? previous.id : crypto.randomUUID();
-      attempts.current[kind] = { payload, id };
-      await api(
-        broadcast ? "ppl/broadcasts" : "ppl/follow-ups",
-        jsonRequest(broadcast ? "POST" : "PUT", { ...input, id }),
-      );
-      delete attempts.current[kind];
-      if (!broadcast) setSaved((value) => value + 1);
-      setNotice(broadcast ? "Siaran dikirim ke kotak masuk wilayah." : "Tindak lanjut tersimpan.");
-      form.reset();
-      onChange();
-    } catch (error) {
-      setIssue(errorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const districtOptions = (
+function FollowUpCells({ entry }: { entry: FollowUp }) {
+  return (
     <>
-      <option value="" disabled>
-        Pilih kecamatan
-      </option>
-      {districts.map((district) => (
-        <option key={district.id} value={district.id}>
-          {district.name}
-        </option>
-      ))}
+      <td>
+        <strong>{entry.districtName}</strong>
+      </td>
+      <td>{entry.kind === "outreach" ? "Penyuluhan" : "Bantuan"}</td>
+      <td>
+        <span className={tw("tag")}>{entry.status === "planned" ? "Direncanakan" : "Selesai"}</span>
+      </td>
+      <td>{entry.note}</td>
+      <td>{formatDate(entry.updatedAt)} WIB</td>
     </>
   );
+}
+
+export function ActionsPanel() {
+  const search = useSearchParams();
+  const rawDialog = search.get("dialog");
+  const dialog = rawDialog === "broadcast" || rawDialog === "follow-up" ? rawDialog : null;
+  const rawPage = search.get("page");
+  const page = parsePageIndex(rawPage);
+  const { data, issue, retry, loading } = useOfficerData(`ppl/follow-ups?page=${page}`, followUpsSchema);
+  const currentPage =
+    data?.totalPages === undefined ? page : data.totalPages > 0 ? Math.min(page, data.totalPages - 1) : 0;
+
+  useEffect(() => {
+    normalizeBrowserPage("page", rawPage, page);
+  }, [page, rawPage]);
+
+  useEffect(() => {
+    if (data) normalizeBrowserPage("page", rawPage, currentPage);
+  }, [currentPage, data, rawPage]);
+
+  useEffect(() => {
+    if (rawDialog && !dialog) patchBrowserQuery({ dialog: null }, "replace");
+  }, [dialog, rawDialog]);
+
+  function changeDialog(next: "broadcast" | "follow-up" | null) {
+    patchBrowserQuery({ dialog: next }, next ? "push" : "replace");
+  }
 
   return (
-    <section id={id} className={tw("panel")}>
-      <div className={tw("panel-heading")}>
-        <div className={tw("section-title")}>
-          <Megaphone size={21} />
-          <h2>Siaran dan tindak lanjut</h2>
+    <>
+      <div className={tw("page-heading")}>
+        <div>
+          <h1>Siaran dan tindak lanjut</h1>
+          <p>Penyuluhan dan bantuan yang dicatat per kecamatan.</p>
+        </div>
+        <div className={tw("button-row")}>
+          <DashboardFormDialog
+            open={dialog === "broadcast"}
+            onOpenChange={(open) => changeDialog(open ? "broadcast" : null)}
+            trigger={
+              <button type="button" className={tw("secondary")}>
+                Kirim siaran
+              </button>
+            }
+            title="Kirim siaran"
+            description="Pilih kecamatan dan tulis informasi yang ingin diterima petani."
+          >
+            <FollowUpForm broadcast onSaved={retry} />
+          </DashboardFormDialog>
+          <DashboardFormDialog
+            open={dialog === "follow-up"}
+            onOpenChange={(open) => changeDialog(open ? "follow-up" : null)}
+            trigger={
+              <button type="button" className={tw("primary")}>
+                Catat tindak lanjut
+              </button>
+            }
+            title="Catat tindak lanjut"
+            description="Catat penyuluhan atau bantuan untuk kecamatan."
+          >
+            <FollowUpForm onSaved={retry} />
+          </DashboardFormDialog>
         </div>
       </div>
-      {issue && (
-        <p className={tw("panel-note error-text")} role="alert">
-          {issue}
-        </p>
-      )}
-      {notice && (
-        <p className={tw("panel-note")} role="status">
-          {notice}
-        </p>
-      )}
-      <div className={tw("form-two officer-actions")}>
-        <form className={tw("field-form embedded")} onSubmit={(event) => void submit(event, true)}>
-          <h3>Kirim siaran</h3>
-          <label>
-            <FieldLabel required>Kecamatan tujuan</FieldLabel>
-            <select name="districtId" defaultValue="" required>
-              {districtOptions}
-            </select>
-          </label>
-          <label>
-            <FieldLabel required>Judul siaran</FieldLabel>
-            <input name="title" placeholder="Contoh: Pemantauan padi pekan ini" required maxLength={100} />
-          </label>
-          <label>
-            <FieldLabel required>Isi siaran</FieldLabel>
-            <textarea
-              name="body"
-              placeholder="Contoh: Periksa kondisi tanaman di petak pantauan."
-              required
-              maxLength={600}
-              rows={3}
+      <section className="dashboard-table-section" aria-label="Tindak lanjut per kecamatan">
+        <header className="dashboard-table-heading">
+          <h2>Tindak lanjut per kecamatan</h2>
+        </header>
+        <div className={tw("panel")}>
+          {issue && (
+            <DashboardState
+              compact
+              kind="error"
+              title="Data belum dapat diperbarui"
+              description={issue}
+              action={
+                <button className={tw("secondary")} onClick={retry}>
+                  Coba lagi
+                </button>
+              }
             />
-          </label>
-          <button className={tw("primary")} disabled={busy || !districts.length}>
-            Kirim siaran
-          </button>
-        </form>
-        <form className={tw("field-form embedded")} onSubmit={(event) => void submit(event, false)}>
-          <h3>Catat tindak lanjut</h3>
-          <label>
-            <FieldLabel required>Kecamatan tindak lanjut</FieldLabel>
-            <select name="districtId" defaultValue="" required>
-              {districtOptions}
-            </select>
-          </label>
-          <div className={tw("form-two")}>
-            <label>
-              <FieldLabel required>Jenis</FieldLabel>
-              <select name="kind" defaultValue="" required>
-                <option value="" disabled>
-                  Pilih jenis
-                </option>
-                <option value="outreach">Penyuluhan</option>
-                <option value="assistance">Bantuan</option>
-              </select>
-            </label>
-            <label>
-              <FieldLabel required>Status tindak lanjut</FieldLabel>
-              <select name="status" defaultValue="" required>
-                <option value="" disabled>
-                  Pilih status
-                </option>
-                <option value="planned">Direncanakan</option>
-                <option value="complete">Selesai</option>
-              </select>
-            </label>
-          </div>
-          <label>
-            <FieldLabel required>Catatan tindak lanjut</FieldLabel>
-            <textarea
-              name="note"
-              placeholder="Contoh: Kunjungan lapangan pada hari Senin."
-              required
-              maxLength={600}
-              rows={3}
-            />
-          </label>
-          <button className={tw("primary")} disabled={busy || !districts.length}>
-            Simpan tindak lanjut
-          </button>
-        </form>
-      </div>
-      {!!followUps.length && (
-        <ul className={tw("list")}>
-          {followUps.map((item) => (
-            <li key={`${item.districtId}-${item.kind}`}>
-              <div>
-                <strong>
-                  {item.districtName} · {item.kind === "outreach" ? "Penyuluhan" : "Bantuan"}
-                </strong>
-                <p>{item.note}</p>
-                <p>{formatDate(item.updatedAt)} WIB</p>
-              </div>
-              <span className={tw("tag")}>{item.status === "planned" ? "Direncanakan" : "Selesai"}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+          )}
+          {data?.entries.length ? (
+            <DataTable label="Tindak lanjut per kecamatan" columns={columns} busy={loading}>
+              {data.entries.map((entry) => (
+                <tr key={`${entry.districtId}-${entry.kind}`}>
+                  <FollowUpCells entry={entry} />
+                </tr>
+              ))}
+            </DataTable>
+          ) : loading ? (
+            <DashboardSkeleton kind="table" columns={columns.length} label="Memuat tindak lanjut…" />
+          ) : (
+            !issue && (
+              <DashboardState
+                title="Belum ada tindak lanjut"
+                description="Catatan penyuluhan dan bantuan akan muncul di sini."
+              />
+            )
+          )}
+          <Pagination
+            label="Halaman tindak lanjut per kecamatan"
+            page={currentPage}
+            hasNext={data?.hasMore ?? false}
+            totalPages={data?.totalPages}
+            busy={loading}
+            onPage={(nextPage) => patchBrowserQuery({ page: pageQueryValue(nextPage) })}
+          />
+        </div>
+      </section>
       <StaffHistory<FollowUpEntry>
         title="Riwayat tindak lanjut"
         path="ppl/follow-ups/history"
-        revision={`${revision}-${saved}`}
+        pageParam="historyPage"
         schema={followUpEntrySchema}
         entryKey={(entry) => entry.id}
+        columns={[...columns, "Petugas"]}
         renderEntry={(entry) => (
           <>
-            <div>
-              <strong>
-                {entry.districtName} · {entry.kind === "outreach" ? "Penyuluhan" : "Bantuan"}
-              </strong>
-              <p>{entry.note}</p>
-              <p>
-                {entry.author} · {formatDate(entry.updatedAt)} WIB
-              </p>
-            </div>
-            <span className={tw("tag")}>{entry.status === "planned" ? "Direncanakan" : "Selesai"}</span>
+            <FollowUpCells entry={entry} />
+            <td>{entry.author}</td>
           </>
         )}
       />
-    </section>
+    </>
   );
 }

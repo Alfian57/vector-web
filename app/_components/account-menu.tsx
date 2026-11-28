@@ -1,29 +1,32 @@
 "use client";
 
+import { AlertDialog } from "@base-ui/react/alert-dialog";
+import { Popover } from "@base-ui/react/popover";
 import Link from "next/link";
-import { ChevronDown, CircleUserRound, LogOut, Mail, Phone, UserRound } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ChevronDown, CircleUserRound, LogOut, Mail, MessageCircle, Phone } from "lucide-react";
+import { useRef, useState, type ReactNode } from "react";
 import type { Account } from "@/lib/domain";
 import { profilePath } from "@/lib/routes";
-import { Avatar } from "./avatar";
-import { useAccountMenuActions } from "./use-account-menu";
-import { accountMenuStyles } from "./account-menu-classes";
 import { tw } from "@/lib/tw";
+import { Avatar } from "./avatar";
+import { DashboardSkeleton, DashboardState } from "./dashboard-state";
+import { useAccountMenuActions } from "./use-account-menu";
 
 type AccountMenuProps = {
   account: Account;
   beforeSignOut?: () => Promise<void>;
   afterSignOut?: () => Promise<void>;
+  mobileLinks?: ReactNode;
+  whatsappHref?: string;
 };
 
 function roleLabel(role: Account["role"]) {
   return role === "admin" ? "Admin" : role === "officer" ? "Petugas PPL" : "Petani";
 }
 
-export function AccountMenu({ account, beforeSignOut, afterSignOut }: AccountMenuProps) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const logoutDialogRef = useRef<HTMLDialogElement>(null);
+export function AccountMenu({ account, beforeSignOut, afterSignOut, mobileLinks, whatsappHref }: AccountMenuProps) {
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const {
@@ -38,175 +41,119 @@ export function AccountMenu({ account, beforeSignOut, afterSignOut }: AccountMen
   } = useAccountMenuActions({ open, beforeSignOut, afterSignOut });
   const label = roleLabel(account.role);
 
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(event: PointerEvent) {
-      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setOpen(false);
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !logoutDialogRef.current?.open) {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
-    }
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    const dialog = logoutDialogRef.current;
-    if (confirming && dialog && !dialog.open) dialog.showModal();
-    if (!confirming && dialog?.open) dialog.close();
-  }, [confirming]);
-
-  useEffect(() => {
-    if (!confirming) return;
-    logoutDialogRef.current?.querySelector<HTMLButtonElement>("[data-cancel]")?.focus();
-  }, [confirming]);
-
   return (
-    <div className={tw(accountMenuStyles.root)} data-account-menu ref={rootRef}>
-      <button
-        ref={triggerRef}
-        type="button"
-        className={tw(accountMenuStyles.trigger)}
-        aria-expanded={open}
-        aria-controls="account-menu-panel"
-        aria-label={`Akun ${account.name}, ${label}`}
-        onClick={() => setOpen((value) => !value)}
+    <div data-account-menu>
+      <Popover.Root open={open} onOpenChange={setOpen}>
+        <Popover.Trigger
+          ref={trigger}
+          className="dashboard-account-trigger"
+          aria-label={`Akun ${account.name}, ${label}`}
+        >
+          <Avatar name={account.name} src={account.image} />
+          <span className="dashboard-account-trigger-copy">
+            <strong>{account.name}</strong>
+            <small>{label}</small>
+          </span>
+          <ChevronDown size={15} strokeWidth={1.75} aria-hidden="true" />
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Positioner className="dashboard-popover-positioner" align="end" sideOffset={8}>
+            <Popover.Popup className="dashboard-theme dashboard-account-popover">
+              <Popover.Title className="sr-only">Akun VEKTOR</Popover.Title>
+              <section aria-label="Menu akun">
+                <div className="dashboard-account-contacts">
+                  {profileLoading && <DashboardSkeleton label="Memuat informasi akun…" kind="contacts" rows={2} />}
+                  {!profileLoading && profileIssue && (
+                    <DashboardState
+                      compact
+                      kind="error"
+                      title="Informasi akun belum dapat dimuat"
+                      action={
+                        <button className="dashboard-inline-link" onClick={retryProfile}>
+                          Coba lagi
+                        </button>
+                      }
+                    />
+                  )}
+                  {!profileLoading && !profileIssue && profile && (
+                    <>
+                      <p>
+                        <Mail size={16} aria-hidden="true" />
+                        {profile.email ?? "Email belum ditambahkan"}
+                      </p>
+                      <p>
+                        <Phone size={16} aria-hidden="true" />
+                        {profile.phoneNumber ?? "WhatsApp belum terhubung"}
+                      </p>
+                    </>
+                  )}
+                </div>
+                <div className="dashboard-account-actions">
+                  <Link href={profilePath} onClick={() => setOpen(false)}>
+                    <CircleUserRound size={18} /> Profil
+                  </Link>
+                  {whatsappHref && (
+                    <Link href={whatsappHref} onClick={() => setOpen(false)}>
+                      <MessageCircle size={18} /> Hubungkan WhatsApp
+                    </Link>
+                  )}
+                  {mobileLinks && <div className="dashboard-account-mobile-links">{mobileLinks}</div>}
+                  <button
+                    type="button"
+                    className="dashboard-signout"
+                    onClick={() => {
+                      setOpen(false);
+                      clearSignOutIssue();
+                      setConfirming(true);
+                    }}
+                  >
+                    <LogOut size={18} /> Keluar
+                  </button>
+                </div>
+              </section>
+            </Popover.Popup>
+          </Popover.Positioner>
+        </Popover.Portal>
+      </Popover.Root>
+      <AlertDialog.Root
+        open={confirming}
+        onOpenChange={(next) => {
+          if (!next && !signingOut) {
+            setConfirming(false);
+            clearSignOutIssue();
+          }
+        }}
       >
-        <Avatar name={account.name} src={account.image} />
-        <span className={tw(accountMenuStyles.triggerCopy)}>
-          <strong className={tw(accountMenuStyles.triggerName)}>{account.name}</strong>
-          <small className={tw(accountMenuStyles.triggerRole)}>{label}</small>
-        </span>
-        <ChevronDown
-          size={16}
-          aria-hidden="true"
-          className={tw(open ? accountMenuStyles.chevronOpen : accountMenuStyles.chevron)}
-        />
-      </button>
-      {open && (
-        <section className={tw(accountMenuStyles.panel)} id="account-menu-panel" aria-label="Menu akun">
-          <div className={tw(accountMenuStyles.identity)}>
-            <Avatar name={account.name} src={profile?.image ?? account.image} size="large" />
-            <div className={tw(accountMenuStyles.identityCopy)}>
-              <strong className={tw(accountMenuStyles.identityName)}>{profile?.name ?? account.name}</strong>
-              <span className={tw(accountMenuStyles.identityRole)}>{label}</span>
-            </div>
-          </div>
-          <div className={tw(accountMenuStyles.contacts)} aria-live="polite">
-            {profileLoading && (
-              <p className={tw(accountMenuStyles.contactStatus)} role="status">
-                Memuat informasi akun…
-              </p>
-            )}
-            {!profileLoading && profileIssue && (
-              <div className={tw(accountMenuStyles.profileError)}>
-                <p className={tw(accountMenuStyles.profileErrorText)} role="alert">
-                  Informasi akun belum dapat dimuat.
-                </p>
-                <button className={tw(accountMenuStyles.retryButton)} type="button" onClick={retryProfile}>
-                  Coba lagi
+        <AlertDialog.Portal>
+          <AlertDialog.Backdrop className="dashboard-backdrop" />
+          <AlertDialog.Viewport className="dashboard-dialog-viewport">
+            <AlertDialog.Popup
+              className="dashboard-theme dashboard-dialog dashboard-confirmation"
+              initialFocus={cancel}
+              finalFocus={trigger}
+            >
+              <AlertDialog.Title>Keluar dari VEKTOR?</AlertDialog.Title>
+              <AlertDialog.Description>
+                Sesi akun pada perangkat ini akan diakhiri. Masuk kembali untuk membuka dashboard.
+              </AlertDialog.Description>
+              {signOutIssue && <DashboardState compact kind="error" title={signOutIssue} />}
+              <div className="dashboard-dialog-actions">
+                <AlertDialog.Close ref={cancel} disabled={signingOut} className={tw("secondary")}>
+                  Batal
+                </AlertDialog.Close>
+                <button
+                  type="button"
+                  disabled={signingOut}
+                  className={tw("danger")}
+                  onClick={() => void confirmSignOut()}
+                >
+                  {signingOut ? "Mengakhiri sesi…" : "Ya, keluar"}
                 </button>
               </div>
-            )}
-            {!profileLoading && !profileIssue && profile && (
-              <>
-                <p className={tw(accountMenuStyles.contact)}>
-                  <Mail className={tw(accountMenuStyles.contactIcon)} size={15} aria-hidden="true" />
-                  <span>{profile.email ?? "Email belum ditambahkan"}</span>
-                </p>
-                <p className={tw(accountMenuStyles.contact)}>
-                  <Phone className={tw(accountMenuStyles.contactIcon)} size={15} aria-hidden="true" />
-                  <span>{profile.phoneNumber ?? "WhatsApp belum terhubung"}</span>
-                </p>
-              </>
-            )}
-          </div>
-          <div className={tw(accountMenuStyles.actions)}>
-            <Link className={tw(accountMenuStyles.action)} href={profilePath} onClick={() => setOpen(false)}>
-              <CircleUserRound size={17} aria-hidden="true" />
-              Profil
-            </Link>
-            <button
-              className={tw(accountMenuStyles.action)}
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                clearSignOutIssue();
-                setConfirming(true);
-              }}
-            >
-              <LogOut size={17} aria-hidden="true" />
-              Keluar
-            </button>
-          </div>
-        </section>
-      )}
-      <dialog
-        ref={logoutDialogRef}
-        className={tw(accountMenuStyles.dialog)}
-        aria-labelledby="account-logout-title"
-        onClose={() => {
-          setConfirming(false);
-          triggerRef.current?.focus();
-        }}
-        onCancel={(event) => {
-          if (signingOut) {
-            event.preventDefault();
-            return;
-          }
-          setConfirming(false);
-          clearSignOutIssue();
-        }}
-        onClick={(event) => {
-          if (event.target === event.currentTarget && !signingOut) setConfirming(false);
-        }}
-      >
-        <div className={tw(accountMenuStyles.dialogContent)}>
-          <span className={tw(accountMenuStyles.dialogIcon)}>
-            <UserRound size={21} aria-hidden="true" />
-          </span>
-          <h2 className={tw("text-[1.27rem]")} id="account-logout-title">
-            Keluar dari VEKTOR?
-          </h2>
-          <p className={tw("text-[.88rem] leading-[1.55] text-muted")}>
-            Sesi akun pada perangkat ini akan diakhiri. Anda perlu masuk kembali untuk membuka dashboard.
-          </p>
-          {signOutIssue && (
-            <p className={tw(accountMenuStyles.logoutError)} role="alert">
-              {signOutIssue}
-            </p>
-          )}
-          <div className={tw(accountMenuStyles.dialogActions)}>
-            <button
-              type="button"
-              className={tw(accountMenuStyles.cancelButton)}
-              data-cancel
-              disabled={signingOut}
-              onClick={() => {
-                setConfirming(false);
-                clearSignOutIssue();
-              }}
-            >
-              Batal
-            </button>
-            <button
-              type="button"
-              className={tw(accountMenuStyles.confirmButton)}
-              disabled={signingOut}
-              onClick={() => void confirmSignOut()}
-            >
-              {signingOut ? "Mengakhiri sesi…" : "Ya, keluar"}
-            </button>
-          </div>
-        </div>
-      </dialog>
+            </AlertDialog.Popup>
+          </AlertDialog.Viewport>
+        </AlertDialog.Portal>
+      </AlertDialog.Root>
     </div>
   );
 }

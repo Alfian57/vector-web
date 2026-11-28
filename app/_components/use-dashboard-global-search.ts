@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { DashboardSearchEntry } from "@/lib/domain";
 import { apiData, errorMessage } from "@/lib/client";
@@ -10,8 +10,7 @@ export type DashboardSearchItem = {
   description: string;
   keywords: string;
   icon: LucideIcon;
-  href?: string;
-  onSelect?: () => void;
+  href: string;
 };
 
 type SearchState = { query: string; entries: DashboardSearchEntry[]; loading: boolean; issue: string };
@@ -22,8 +21,7 @@ export function useDashboardGlobalSearch(items: readonly DashboardSearchItem[]) 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchState, setSearchState] = useState<SearchState>(emptyState);
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [reload, setReload] = useState(0);
   const normalizedQuery = query.trim().toLocaleLowerCase("id-ID");
   const shouldSearch = open && normalizedQuery.length >= 2;
   const matchingItems = useMemo(
@@ -64,43 +62,11 @@ export function useDashboardGlobalSearch(items: readonly DashboardSearchItem[]) 
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [normalizedQuery, open, query, shouldSearch]);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (open && dialog && !dialog.open) {
-      dialog.showModal();
-      inputRef.current?.focus();
-    }
-    if (!open && dialog?.open) dialog.close();
-  }, [open]);
-
-  useEffect(() => {
-    function onShortcut(event: KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setQuery("");
-        setOpen(true);
-      }
-    }
-
-    window.addEventListener("keydown", onShortcut);
-    return () => window.removeEventListener("keydown", onShortcut);
-  }, []);
-
-  function openDialog() {
-    setQuery("");
-    setOpen(true);
-  }
-
-  function closeDialog() {
-    setOpen(false);
-    setQuery("");
-  }
+  }, [normalizedQuery, query, shouldSearch, reload]);
 
   return {
-    dialogRef,
-    inputRef,
+    open,
+    setOpen,
     query,
     setQuery,
     matchingItems,
@@ -108,7 +74,9 @@ export function useDashboardGlobalSearch(items: readonly DashboardSearchItem[]) 
     loading: shouldSearch && (!currentSearch || searchState.loading),
     issue: shouldSearch && currentSearch ? searchState.issue : "",
     shouldSearch,
-    openDialog,
-    closeDialog,
+    retry: () => {
+      setSearchState({ query: normalizedQuery, entries: [], loading: true, issue: "" });
+      setReload((value) => value + 1);
+    },
   };
 }

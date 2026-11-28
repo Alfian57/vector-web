@@ -1,20 +1,23 @@
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { getAccount } from "@/lib/server/auth";
+import { Suspense, type ReactNode } from "react";
+import { DashboardPageSkeleton } from "../_components/dashboard-state";
+import { requireDashboardAccount } from "@/lib/server/dashboard-access";
 import { recordPageView } from "@/lib/server/activity-log";
-import { unavailable } from "@/lib/server/http";
-import { accountUnavailablePath, officerPath, officerRequiredPath, signInFor } from "@/lib/routes";
-import { Dashboard } from "./dashboard";
 
-export async function ProtectedDashboard() {
-  const requestHeaders = await headers();
-  const account = await getAccount(requestHeaders).catch((error: unknown) => {
-    unavailable(error);
-    return undefined;
-  });
-  if (account === undefined) redirect(accountUnavailablePath);
-  if (!account) redirect(signInFor(officerPath));
-  if (account.role !== "officer") redirect(officerRequiredPath);
-  await recordPageView(account, officerPath);
-  return <Dashboard account={account} />;
+export function OfficerPageBoundary({
+  children,
+  kind = "table",
+}: {
+  children: ReactNode;
+  kind?: "map" | "officer" | "table" | "form" | "review" | "allocation";
+}) {
+  return (
+    <Suspense fallback={<DashboardPageSkeleton label="Memeriksa akses PPL…" kind={kind} />}>
+      {children}
+    </Suspense>
+  );
+}
+
+export async function recordOfficerPage(path: string, auditPath = path) {
+  const account = await requireDashboardAccount(path, "officer");
+  await recordPageView(account, auditPath);
 }

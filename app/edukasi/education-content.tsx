@@ -1,4 +1,6 @@
 import Link from "next/link";
+import Image from "next/image";
+import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { BookOpen, Search } from "lucide-react";
 import { headers } from "next/headers";
@@ -6,27 +8,67 @@ import { listPublishedArticles } from "@/lib/server/education";
 import { educationPath } from "@/lib/routes";
 import { getAccount } from "@/lib/server/auth";
 import { recordPageView } from "@/lib/server/activity-log";
+import { paginationPageNumbers } from "@/lib/pagination";
 import { tw } from "@/lib/tw";
+import { DashboardState } from "@/app/_components/dashboard-state";
+import { Pagination } from "@/app/_components/pagination";
+import { pageQueryValue, parsePageIndex } from "@/lib/query-state";
 
 export async function EducationContent({ searchParams }: Pick<PageProps<"/edukasi">, "searchParams">) {
   await connection();
   const account = await getAccount(await headers()).catch(() => null);
-  await recordPageView(account, educationPath);
   const query = await searchParams;
   const params = new URLSearchParams();
-  const search = typeof query.q === "string" ? query.q : "";
-  const category = typeof query.category === "string" ? query.category : "";
-  const currentPage =
-    typeof query.page === "string" && Number.isSafeInteger(Number(query.page)) ? Number(query.page) : 0;
+  const rawSearch = typeof query.q === "string" ? query.q : "";
+  const rawCategory = typeof query.category === "string" ? query.category : "";
+  const search = rawSearch.trim().slice(0, 100);
+  const category = rawCategory.trim().slice(0, 50);
+  const rawPage = typeof query.page === "string" ? query.page : null;
+  const requestedPage = parsePageIndex(rawPage);
   if (search) params.set("q", search);
   if (category) params.set("category", category);
-  if (currentPage > 0) params.set("page", String(currentPage));
-  const { entries, hasMore } = await listPublishedArticles(params);
-  const nextParams = new URLSearchParams(params);
-  nextParams.set("page", String(currentPage + 1));
-  const previousParams = new URLSearchParams(params);
-  if (currentPage <= 1) previousParams.delete("page");
-  else previousParams.set("page", String(currentPage - 1));
+  if (requestedPage > 0) params.set("page", String(requestedPage));
+  const firstPage = await listPublishedArticles(params);
+  const currentPageCount = firstPage.totalPages ?? 0;
+  const currentPage = currentPageCount > 0 ? Math.min(requestedPage, currentPageCount - 1) : 0;
+  const canonicalPage = pageQueryValue(currentPage);
+  const routeParams = new URLSearchParams();
+  const originalParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (typeof value === "string") originalParams.set(key, value);
+    else if (value !== undefined) {
+      for (const entry of value) originalParams.append(key, entry);
+    }
+
+    if (key === "q") {
+      if (search) routeParams.set("q", search);
+    } else if (key === "category") {
+      if (category) routeParams.set("category", category);
+    } else if (key === "page") {
+      if (canonicalPage) routeParams.set("page", canonicalPage);
+    } else if (typeof value === "string") {
+      routeParams.set(key, value);
+    } else if (value !== undefined) {
+      for (const entry of value) routeParams.append(key, entry);
+    }
+  }
+  if (!Object.prototype.hasOwnProperty.call(query, "q") && search) routeParams.set("q", search);
+  if (!Object.prototype.hasOwnProperty.call(query, "category") && category) routeParams.set("category", category);
+  if (!Object.prototype.hasOwnProperty.call(query, "page") && canonicalPage) routeParams.set("page", canonicalPage);
+  if (routeParams.toString() !== originalParams.toString()) {
+    const canonicalQuery = routeParams.toString();
+    redirect(canonicalQuery ? `${educationPath}?${canonicalQuery}` : educationPath);
+  }
+  await recordPageView(account, educationPath);
+  const { entries, hasMore, totalPages } = firstPage;
+  const pageHrefs = paginationPageNumbers(currentPage, totalPages, hasMore).map((pageIndex) => {
+    const pageParams = new URLSearchParams(routeParams);
+    const pageValue = pageQueryValue(pageIndex);
+    if (pageValue) pageParams.set("page", pageValue);
+    else pageParams.delete("page");
+    const queryString = pageParams.toString();
+    return { page: pageIndex, href: queryString ? `${educationPath}?${queryString}` : educationPath };
+  });
 
   return (
     <main className={tw("mx-auto flex min-h-screen w-[min(calc(100%_-_2_*_clamp(16px,_5vw,_70px)),1080px)] flex-col")}>
@@ -77,6 +119,7 @@ export async function EducationContent({ searchParams }: Pick<PageProps<"/edukas
             defaultValue={search}
           />
         </div>
+        {category && <input type="hidden" name="category" value={category} />}
         <button
           className={tw(
             "inline-flex min-h-[42px] w-fit items-center gap-2 justify-self-end rounded-[7px] border border-transparent bg-forest px-[13px] py-[9px] text-[.87rem] leading-[1.25] font-[640] text-white hover:bg-[#24523c]",
@@ -94,6 +137,16 @@ export async function EducationContent({ searchParams }: Pick<PageProps<"/edukas
               )}
               key={article.id}
             >
+              {article.thumbnailSrc && (
+                <Image
+                  className={tw("mb-[14px] aspect-video w-full rounded-[7px] object-cover")}
+                  src={article.thumbnailSrc}
+                  alt=""
+                  width={640}
+                  height={360}
+                  unoptimized
+                />
+              )}
               <span
                 className={tw(
                   "w-fit self-start rounded-full bg-[#e7eee0] px-[9px] py-[5px] text-[.76rem] font-[680] text-[#3e6241]",
@@ -117,37 +170,21 @@ export async function EducationContent({ searchParams }: Pick<PageProps<"/edukas
           ))}
         </div>
       ) : (
-        <section className={tw("rounded-[10px] border border-line bg-surface p-7")}>
-          <h2>Belum ada panduan yang cocok</h2>
-          <p className={tw("mt-[7px] text-muted")}>
-            Coba kata kunci lain atau kembali lagi saat panduan baru tersedia.
-          </p>
+        <section className={tw("rounded-[10px] border border-line bg-surface")}>
+          <DashboardState
+            title="Belum ada panduan yang cocok"
+            description="Coba kata kunci lain atau kembali lagi saat panduan baru tersedia."
+          />
         </section>
       )}
-      {(currentPage > 0 || hasMore) && (
-        <nav className={tw("flex justify-center gap-2 py-[25px]")} aria-label="Halaman panduan">
-          {currentPage > 0 && (
-            <Link
-              className={tw(
-                "inline-flex min-h-[42px] w-fit items-center justify-center gap-2 rounded-[7px] border border-line bg-surface px-[13px] py-[9px] text-[.87rem] leading-[1.25] font-[640] text-forest hover:bg-[#edf2e7]",
-              )}
-              href={`${educationPath}?${previousParams}`}
-            >
-              Artikel sebelumnya
-            </Link>
-          )}
-          {hasMore && (
-            <Link
-              className={tw(
-                "inline-flex min-h-[42px] w-fit items-center justify-center gap-2 rounded-[7px] border border-line bg-surface px-[13px] py-[9px] text-[.87rem] leading-[1.25] font-[640] text-forest hover:bg-[#edf2e7]",
-              )}
-              href={`${educationPath}?${nextParams}`}
-            >
-              Artikel berikutnya
-            </Link>
-          )}
-        </nav>
-      )}
+      <Pagination
+        label="Halaman panduan"
+        page={currentPage}
+        hasNext={hasMore}
+        totalPages={totalPages}
+        pageHrefs={pageHrefs}
+        className="dashboard-pagination--standalone"
+      />
       <footer
         className={tw(
           "mt-auto flex flex-wrap justify-between gap-[10px] py-[25px] text-[.82rem] text-muted [&_a]:font-[660] [&_a]:text-forest",

@@ -1,21 +1,14 @@
 import type { NextConfig } from "next";
-import { homePath, radarPath } from "./lib/routes";
 
 const nextConfig: NextConfig = {
   ...(process.env.VEKTOR_TEST_NEXT_DIST_DIR ? { distDir: process.env.VEKTOR_TEST_NEXT_DIST_DIR } : {}),
-  experimental: { agentFeedback: true },
+  experimental: {
+    agentFeedback: true,
+    // Cached Radar documents must hydrate offline without the development WebSocket.
+    reactDebugChannel: false,
+  },
   cacheComponents: true,
   partialPrefetching: true,
-  async redirects() {
-    return [
-      {
-        source: homePath,
-        destination: radarPath,
-        has: [{ type: "query", key: "view", value: "alerts" }],
-        permanent: false,
-      },
-    ];
-  },
   async headers() {
     return ["/sw.js", "/sw-dev.js"].map((source) => ({
       source,

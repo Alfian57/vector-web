@@ -1,10 +1,18 @@
 import type { StyleSpecification } from "maplibre-gl";
 import { districtPath, type DistrictSummary } from "@/lib/domain";
 
+export const radarPalette = {
+  cluster: "#9f3c2f",
+  observed: "#d9bd75",
+  empty: "#b9c6ae",
+  pin: "#203d2f",
+};
+
 export const localSource = "vektor-base";
 export const districtsSource = "vektor-districts";
 export const pinSource = "vektor-pin";
 export const districtFill = "vektor-district-fill";
+export const districtFocus = "vektor-district-focus";
 export type MapMode = "map" | "satellite";
 export type DistrictState = { count: number; clustered: boolean };
 
@@ -38,10 +46,10 @@ export function withRadarLayers(style: StyleSpecification, satellite = false): S
           "fill-color": [
             "case",
             ["boolean", ["feature-state", "clustered"], false],
-            "#d75a3c",
+            radarPalette.cluster,
             [">", ["number", ["feature-state", "count"], 0], 0],
-            "#e9ac43",
-            "#a5bba0",
+            radarPalette.observed,
+            radarPalette.empty,
           ],
           "fill-opacity": [
             "case",
@@ -58,26 +66,43 @@ export function withRadarLayers(style: StyleSpecification, satellite = false): S
         type: "line",
         source: districtsSource,
         paint: {
-          "line-color": satellite ? "#f3f7ea" : "#576c54",
+          "line-color": satellite ? "#f2f4ed" : "#556851",
           "line-opacity": satellite ? 0.75 : 0.65,
           "line-width": 1.2,
         },
       },
       {
+        id: "vektor-cluster-outline",
+        type: "line",
+        source: districtsSource,
+        paint: {
+          "line-color": radarPalette.cluster,
+          "line-opacity": ["case", ["boolean", ["feature-state", "clustered"], false], 1, 0],
+          "line-width": 2.4,
+        },
+      },
+      {
+        id: districtFocus,
+        type: "line",
+        source: districtsSource,
+        filter: ["==", ["get", "id"], ""],
+        paint: { "line-color": satellite ? "#f2f4ed" : radarPalette.pin, "line-width": 3 },
+      },
+      {
         id: "vektor-district-label",
         type: "symbol",
         source: districtsSource,
-        minzoom: 8,
+        minzoom: 7,
         layout: {
           "text-field": ["get", "name"],
           "text-font": style.glyphs ? ["Noto Sans Bold"] : ["Arial", "sans-serif"],
-          "text-size": ["interpolate", ["linear"], ["zoom"], 8, 10, 11, 12, 14, 14],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 7, 9, 8, 10, 11, 12, 14, 14],
           "text-max-width": 9,
           "text-padding": 4,
         },
         paint: {
-          "text-color": satellite ? "#fffdf5" : "#203d37",
-          "text-halo-color": satellite ? "#15271d" : "#fbfcf5",
+          "text-color": satellite ? "#f2f4ed" : "#26362c",
+          "text-halo-color": satellite ? "#26362c" : "#f2f4ed",
           "text-halo-width": satellite ? 1.6 : 1.25,
         },
       },
@@ -86,7 +111,7 @@ export function withRadarLayers(style: StyleSpecification, satellite = false): S
         type: "circle",
         source: pinSource,
         paint: {
-          "circle-color": "#143b2c",
+          "circle-color": radarPalette.pin,
           "circle-radius": 7,
           "circle-stroke-color": "#fff",
           "circle-stroke-width": 2,
@@ -110,7 +135,7 @@ export function localRadarStyle(tileSource?: string): StyleSpecification {
     version: 8,
     sources,
     layers: [
-      { id: "earth", type: "background", paint: { "background-color": "#e2e8d4" } },
+      { id: "earth", type: "background", paint: { "background-color": "#e8ecdf" } },
       ...(tileSource
         ? ([
             {
@@ -118,21 +143,21 @@ export function localRadarStyle(tileSource?: string): StyleSpecification {
               type: "fill",
               source: localSource,
               "source-layer": "landuse",
-              paint: { "fill-color": "#cedaba", "fill-opacity": 0.62 },
+              paint: { "fill-color": "#cdd8bf", "fill-opacity": 0.75 },
             },
             {
               id: "water",
               type: "fill",
               source: localSource,
               "source-layer": "water",
-              paint: { "fill-color": "#a8cbc5" },
+              paint: { "fill-color": "#c1d9d1" },
             },
             {
               id: "rivers",
               type: "line",
               source: localSource,
               "source-layer": "water",
-              paint: { "line-color": "#9bc5bc", "line-width": 1.3 },
+              paint: { "line-color": "#95b9ae", "line-width": 1.3 },
             },
             {
               id: "roads",
@@ -141,7 +166,7 @@ export function localRadarStyle(tileSource?: string): StyleSpecification {
               "source-layer": "roads",
               minzoom: 8,
               paint: {
-                "line-color": "#fffdf1",
+                "line-color": "#ffffff",
                 "line-opacity": 0.86,
                 "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.25, 14, 2],
               },

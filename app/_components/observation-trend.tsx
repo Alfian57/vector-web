@@ -1,52 +1,53 @@
-"use client";
-
 import type { ObservedWeek } from "@/lib/domain";
-import { tw } from "@/lib/tw";
+import { DashboardSkeleton, DashboardState } from "./dashboard-state";
 
 const day = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", timeZone: "UTC" });
 const number = new Intl.NumberFormat("id-ID");
+const compactNumber = new Intl.NumberFormat("id-ID", { notation: "compact", maximumFractionDigits: 1 });
 
 export function ObservationTrend({
   weeks,
-  cached,
   loading,
+  cached,
 }: {
-  weeks?: ObservedWeek[];
-  cached: boolean;
+  weeks?: readonly ObservedWeek[];
   loading: boolean;
+  cached: boolean;
 }) {
-  const peak = Math.max(1, ...(weeks ?? []).map((week) => week.count));
+  const recent = weeks?.slice(-4) ?? [];
+  const peak = Math.max(1, ...recent.map((week) => week.count));
+
   return (
-    <section className={tw("panel")} aria-labelledby="trend-heading">
-      <div className={tw("panel-heading")}>
-        <div>
-          <h2 id="trend-heading">Tren temuan terverifikasi</h2>
-          <p>Jumlah laporan kondisi tidak sehat di Karawang per tujuh hari berdasarkan tanggal pengamatan (WIB).</p>
-        </div>
+    <section className="dashboard-radar-widget dashboard-field-trend" aria-labelledby="trend-heading">
+      <div className="dashboard-widget-heading">
+        <h2 id="trend-heading">Tren temuan</h2>
+        <p>{cached && recent.length ? "Cuplikan tersimpan" : "Karawang, 4 minggu"}</p>
       </div>
-      {cached && weeks && (
-        <p className={tw("panel-note muted")} role="status">
-          Menampilkan tren terakhir yang tersimpan.
-        </p>
-      )}
-      {weeks ? (
-        <ol className={tw("observed-trend")} aria-label="Jumlah temuan per periode">
-          {weeks.map((week) => (
+      {recent.length ? (
+        <ol>
+          {recent.map((week) => (
             <li key={week.startOn}>
-              <strong>{number.format(week.count)} laporan</strong>
-              <div className={tw("observed-trend-track")} aria-hidden="true">
-                <span style={{ height: `${(week.count / peak) * 100}%` }} />
+              <div className="dashboard-field-trend-track">
+                <div className="dashboard-field-trend-bar" style={{ height: `${(week.count / peak) * 100}%` }}>
+                  <strong title={`${number.format(week.count)} laporan`}>
+                    <span aria-hidden="true">
+                      {week.count >= 1000 ? compactNumber.format(week.count) : number.format(week.count)}
+                    </span>
+                    <span className="sr-only">{number.format(week.count)} laporan</span>
+                  </strong>
+                </div>
               </div>
-              <span>
-                {day.format(new Date(week.startOn))} – {day.format(new Date(week.endOn))}
+              <span className="sr-only">
+                {day.format(new Date(week.startOn))} sampai {day.format(new Date(week.endOn))}
               </span>
+              <span aria-hidden="true">{day.format(new Date(week.startOn))}</span>
             </li>
           ))}
         </ol>
+      ) : loading ? (
+        <DashboardSkeleton label="Memuat tren temuan…" kind="trend" />
       ) : (
-        <p className={tw("empty")}>
-          {loading ? "Memuat tren…" : "Tren belum tersedia. Buka radar saat terhubung untuk memuat data."}
-        </p>
+        <DashboardState compact title="Riwayat mingguan belum tersedia" />
       )}
     </section>
   );

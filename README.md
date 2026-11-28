@@ -39,7 +39,11 @@ Schema berada di [prisma/schema.prisma](prisma/schema.prisma) dan histori SQL di
 
 Untuk database baru maupun database VEKTOR yang sudah berjalan, jalankan `bun --env-file=.env.local run db:migrate` di host atau gunakan layanan `migrate` dari Compose. Perintah ini menandai migrasi lama yang sudah tercatat, menerapkan migrasi yang tersisa, lalu memuat batas 30 kecamatan. Gunakan perintah ini saat beralih ke Prisma agar data lama dan riwayat migrasi tetap dipertahankan.
 
-Setelah mengubah schema, jalankan `bun run db:generate` untuk memperbarui Prisma Client. Buat perubahan skema sebagai migrasi baru. Simpan perintah terkait PostGIS dan batas database di migrasi SQL.
+Migrasi `008_education_thumbnails` menambahkan kolom thumbnail sambil mempertahankan artikel dan gambar yang sudah ada. `bun run dev` dan `bun run dev:all` memperbarui Prisma Client saat startup. Jika skema berubah saat server masih berjalan, terapkan migrasi yang diperlukan dan mulai ulang server agar proses memuat Prisma Client terbaru.
+
+### Tampilan dashboard
+
+Radar, PPL, Admin, dan Profil menggunakan navigasi bawah di ponsel. Di layar lebar, Radar menempatkan ringkasan pemantauan di samping peta Karawang, diikuti cuaca, tren temuan, dan kesiapan perangkat. Kesiapan perangkat menampilkan status peta offline dan antrean laporan lokal. Pilih kecamatan dari tabel klaster untuk memusatkan peta. Tabel yang panjang dapat digulir di dalam panel agar tinggi halaman tetap terkendali. Saat koneksi terputus, Radar menunjukkan cuplikan yang tersimpan serta status antrean perangkat. Base UI menangani dialog dan popover dengan fokus keyboard, dan Lucide menyediakan ikon.
 
 ### Data demo untuk presentasi
 
@@ -54,7 +58,7 @@ Tiga akun demo memiliki nomor WhatsApp unik yang ditandai terverifikasi untuk pr
 
 ### Edukasi, Admin, dan audit
 
-Editor edukasi memakai Tiptap 3 (MIT) untuk menyimpan konten terstruktur serta merendernya di server. LogTape 2 (MIT) menghasilkan log sistem JSON Lines dan catatan audit disimpan di PostgreSQL. Gambar JPEG, PNG, dan WebP hingga 5 MB diproses menjadi WebP dan disimpan di PostgreSQL. Artikel terbit dapat dibaca publik; draf dan medianya memerlukan sesi Admin. Artikel demo menyertakan rujukan resmi Kementerian Pertanian.
+Editor edukasi memakai Tiptap 3 (MIT) untuk menyimpan konten terstruktur serta merendernya di server. Field **Gambar artikel** mengatur thumbnail opsional untuk daftar `/edukasi`. Tambahkan gambar ke isi panduan lewat toolbar editor. Keduanya dapat dipilih sejak dialog **Artikel baru** dan akan tersimpan bersama artikel. Gambar JPEG, PNG, dan WebP hingga 5 MB diproses menjadi WebP. Setiap penyimpanan menerima maksimal 10 gambar baru dengan total 20 MB. Artikel terbit dan media yang dirujuknya dapat dibaca publik. Draf dan medianya memerlukan sesi Admin. Artikel demo menyertakan rujukan resmi Kementerian Pertanian. LogTape 2 (MIT) menghasilkan log sistem JSON Lines dan catatan audit disimpan di PostgreSQL.
 
 Log mencatat autentikasi tanpa isi kredensial, perubahan data melalui API, kunjungan ke dashboard dan edukasi, perubahan akun/artikel, dan transisi status worker. Log dipertahankan 90 hari, lalu dihapus worker. Log tidak merekam kata sandi, kode OTP, token WhatsApp, atau payload laporan.
 
@@ -83,13 +87,13 @@ Di **Dasbor PPL → Alokasi bantuan**, PPL menentukan kecamatan, barang, jumlah,
 
 ## Verifikasi dan tindak lanjut PPL
 
-Pilih laporan yang sudah ditinjau di antrean PPL untuk membuka **Riwayat verifikasi** atau **Koreksi keputusan**. Koreksi memerlukan alasan dan memicu penghitungan ulang radar. Jika koreksi mengubah klaster aktif menjadi tidak aktif, petak di kecamatan tersebut menerima pemberitahuan koreksi. **Riwayat tindak lanjut** menyimpan setiap pencatatan penyuluhan dan bantuan, termasuk catatan terakhir yang diimpor melalui migrasi.
+Buka laporan yang sudah ditinjau dari antrean PPL. **Riwayat verifikasi** tampil pada detail laporan, dan **Koreksi keputusan** membuka halaman formulir. Koreksi memerlukan alasan dan memicu penghitungan ulang radar. Jika koreksi mengubah klaster aktif menjadi tidak aktif, petak di kecamatan tersebut menerima pemberitahuan koreksi. **Riwayat tindak lanjut** menyimpan setiap pencatatan penyuluhan dan bantuan, termasuk catatan terakhir yang diimpor melalui migrasi.
 
 Aplikasi memakai ID permintaan yang sama saat mencoba ulang siaran dan tindak lanjut yang belum mendapat konfirmasi. Klien API yang menginginkan perilaku ini dapat menyertakan `id` UUID pada `POST /api/ppl/broadcasts` dan `PUT /api/ppl/follow-ups`.
 
 ## Radar dan data
 
-Landing page `/` dan pusat edukasi `/edukasi` terbuka untuk pengunjung. Seluruh `/radar`, termasuk Laporan, Petak, dan Peringatan, memerlukan akun terverifikasi. Tautan ke dasbor mengarahkan pengunjung ke halaman masuk dan kembali ke tujuan setelah sesi aktif. Dasbor `/ppl` khusus petugas; `/admin` khusus Admin. Permintaan peran yang tidak sesuai dialihkan ke radar. Radar dan antrean lokal tersedia saat offline pada perangkat yang sudah disiapkan ketika masuk.
+Landing page `/` dan pusat edukasi `/edukasi` terbuka untuk pengunjung. Seluruh halaman Radar memerlukan akun terverifikasi. Tautan dasbor mengarahkan pengunjung ke halaman masuk dan kembali ke tujuan setelah sesi aktif. Dasbor `/ppl` khusus petugas, dan `/admin` khusus Admin. Permintaan peran yang tidak sesuai dialihkan ke Radar. Radar, antrean lokal, dan formulir laporan tersedia saat offline pada perangkat yang sudah disiapkan ketika masuk. Lihat [panduan rute](docs/application/routes.md) untuk URL daftar, detail, dan formulir.
 
 Radar menghitung temuan terverifikasi selama tujuh hari terakhir per jenis dan kecamatan. Klaster DBSCAN dihitung di PostGIS dalam UTM zona 48S dengan radius 500 meter dan minimum tiga laporan. Kondisi cuaca ditampilkan untuk wilayah Karawang. Peringatan mengikuti kemunculan klaster aktif dan dikirim kepada akun dengan petak di kecamatan tersebut. Data radar agregat dapat tersimpan di perangkat untuk dibuka kembali tanpa jaringan. Foto, koordinat laporan, dan data petak dibatasi ke akun terkait sesuai perannya.
 
@@ -97,7 +101,7 @@ Perbesar peta untuk menampilkan lebih banyak nama kecamatan. Klik kecamatan untu
 
 Isi `MAPTILER_API_KEY` di `.env.local` untuk pengembangan di host atau di `.env` untuk Compose, kemudian mulai ulang aplikasi. Gunakan kunci browser dan batasi ke origin VEKTOR di pengaturan MapTiler. Saat terhubung, **Peta** memakai Dataviz Light dan **Satelit** menampilkan citra. VEKTOR memakai PMTiles Karawang saat offline, tanpa kunci, atau saat peta online gagal dimuat. Tombol **Siapkan offline** menyimpan paket lokal. Lihat [pengaturan kunci MapTiler](https://docs.maptiler.com/guides/developer/credentials/api-key/).
 
-Radar menampilkan tren empat periode tujuh hari berdasarkan laporan kondisi tidak sehat yang terverifikasi dan tanggal pengamatan WIB. Panduan pemeriksaan tersedia di radar, dan setiap laporan memiliki saran tindak lanjut berdasarkan status dan hasil verifikasi PPL. Waktu pembaruan ringkasan radar berubah saat agregat temuan berubah. Panel menandai cuaca sebagai kedaluwarsa ketika pengamatannya berusia 45 menit atau lebih.
+Radar menampilkan tren empat periode tujuh hari berdasarkan laporan kondisi tidak sehat yang terverifikasi dan tanggal pengamatan WIB. Buat laporan dari halaman Laporan. Setiap laporan memiliki saran tindak lanjut berdasarkan status dan hasil verifikasi PPL. Waktu pembaruan ringkasan radar berubah saat agregat temuan berubah. Panel menandai cuaca sebagai kedaluwarsa ketika pengamatannya berusia 45 menit atau lebih.
 
 Lihat [sumber dan lisensi peta](public/maps/README.md) dan [blueprint konsep VEKTOR](docs/blueprint_konsep_radar_hama_tanaman_webgis_pwa_edge_ai.md).
 

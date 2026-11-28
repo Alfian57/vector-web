@@ -38,6 +38,10 @@ async function startDevelopment() {
   const next = resolve("next/dist/bin/next");
   const steps = [
     {
+      name: "Memperbarui Prisma Client",
+      command: [bun, "run", "db:generate"],
+    },
+    {
       name: "Menyalakan PostGIS",
       command: [
         "docker",

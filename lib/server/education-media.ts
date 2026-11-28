@@ -1,14 +1,23 @@
 import sharp from "sharp";
+import type { JSONContent } from "@tiptap/core";
 import type { Account } from "@/lib/domain";
+import {
+  educationImageId,
+  educationImageMaxBytes,
+  educationImageSources,
+  educationImageSrc,
+  educationImagesMaxCount,
+  educationImagesMaxTotalBytes,
+  isPendingEducationImage,
+} from "@/lib/education-images";
 import { db, transaction } from "./db";
 import { writeActivity } from "./activity-log";
 import { RequestError } from "./http";
 
-const maxImageBytes = 5_000_000;
-
-async function readUpload(request: Request) {
+async function readImageForm(request: Request, maxBytes: number) {
   const contentLength = Number(request.headers.get("content-length") ?? 0);
-  if (contentLength > maxImageBytes + 20_000) throw new RequestError(413, "Ukuran gambar melebihi 5 MB.");
+  const sizeError = "Ukuran unggahan gambar melebihi batas.";
+  if (contentLength > maxBytes) throw new RequestError(413, sizeError);
   if (!request.body || !request.headers.get("content-type")?.startsWith("multipart/form-data;")) {
     throw new RequestError(422, "Pilih gambar artikel.");
   }
@@ -19,24 +28,54 @@ async function readUpload(request: Request) {
     const { value, done } = await reader.read();
     if (done) break;
     bytes += value.byteLength;
-    if (bytes > maxImageBytes + 20_000) {
+    if (bytes > maxBytes) {
       await reader.cancel();
-      throw new RequestError(413, "Ukuran gambar melebihi 5 MB.");
+      throw new RequestError(413, sizeError);
     }
     chunks.push(new Uint8Array(value));
   }
   const form = await new Response(new Blob(chunks), { headers: request.headers }).formData().catch(() => null);
-  const file = form?.get("image");
-  if (!(file instanceof File) || !file.size || file.size > maxImageBytes) {
-    throw new RequestError(422, "Pilih gambar berukuran maksimal 5 MB.");
-  }
-  return Buffer.from(await file.arrayBuffer());
+  if (!form) throw new RequestError(422, "Unggahan gambar tidak valid.");
+  return form;
 }
 
-export async function uploadEducationImage(actor: Account, articleId: string, request: Request) {
-  const exists = await db().educationArticle.findUnique({ where: { id: articleId }, select: { status: true } });
-  if (!exists || exists.status === "archived") throw new RequestError(404, "Artikel tidak ditemukan.");
-  const input = await readUpload(request);
+function requireImageFile(file: unknown) {
+  if (!(file instanceof File) || !file.size || file.size > educationImageMaxBytes) {
+    throw new RequestError(422, "Pilih gambar berukuran maksimal 5 MB.");
+  }
+  return file;
+}
+
+export async function readEducationSaveRequest(request: Request) {
+  const images = new Map<string, File>();
+  if (!request.headers.get("content-type")?.startsWith("multipart/form-data;")) {
+    return { body: (await request.json()) as unknown, images };
+  }
+
+  const form = await readImageForm(request, educationImagesMaxTotalBytes + 1_000_000);
+  const [article, extraArticle] = form.getAll("article");
+  if (typeof article !== "string" || extraArticle !== undefined || article.length > 250_000) {
+    throw new RequestError(422, "Data artikel tidak valid.");
+  }
+  let totalBytes = 0;
+  for (const [field, value] of form.entries()) {
+    if (field === "article") continue;
+    const source = field.slice("image:".length);
+    if (!field.startsWith("image:") || !isPendingEducationImage(source) || images.has(source)) {
+      throw new RequestError(422, "Referensi gambar baru tidak valid.");
+    }
+    const file = requireImageFile(value);
+    totalBytes += file.size;
+    if (images.size >= educationImagesMaxCount || totalBytes > educationImagesMaxTotalBytes) {
+      throw new RequestError(413, "Tambahkan maksimal 10 gambar baru dengan total 20 MB per penyimpanan.");
+    }
+    images.set(source, file);
+  }
+  return { body: JSON.parse(article) as unknown, images };
+}
+
+export async function optimizeEducationImage(file: File) {
+  const input = Buffer.from(await file.arrayBuffer());
   const processor = sharp(input, { limitInputPixels: 20_000_000 });
   const metadata = await processor.metadata().catch(() => null);
   if (!metadata || !["jpeg", "png", "webp"].includes(metadata.format ?? "")) {
@@ -48,18 +87,25 @@ export async function uploadEducationImage(actor: Account, articleId: string, re
     .webp({ quality: 80 })
     .toBuffer({ resolveWithObject: true })
     .catch(() => null);
-  if (!optimized || !optimized.data.byteLength || optimized.data.byteLength > maxImageBytes) {
+  if (!optimized || !optimized.data.byteLength || optimized.data.byteLength > educationImageMaxBytes) {
     throw new RequestError(422, "Gambar tidak dapat diproses.");
   }
+  return {
+    mimeType: "image/webp",
+    image: optimized.data,
+    width: optimized.info.width,
+    height: optimized.info.height,
+  };
+}
+
+export async function uploadEducationImage(actor: Account, articleId: string, request: Request) {
+  const exists = await db().educationArticle.findUnique({ where: { id: articleId }, select: { status: true } });
+  if (!exists || exists.status === "archived") throw new RequestError(404, "Artikel tidak ditemukan.");
+  const form = await readImageForm(request, educationImageMaxBytes + 20_000);
+  const optimized = await optimizeEducationImage(requireImageFile(form.get("image")));
   const saved = await transaction(async (client) => {
     const media = await client.educationImage.create({
-      data: {
-        articleId,
-        mimeType: "image/webp",
-        image: optimized.data,
-        width: optimized.info.width,
-        height: optimized.info.height,
-      },
+      data: { articleId, ...optimized },
       select: { id: true },
     });
     await writeActivity(
@@ -75,22 +121,34 @@ export async function uploadEducationImage(actor: Account, articleId: string, re
     );
     return media;
   });
-  return { id: saved.id, src: `/api/education/images/${saved.id}` };
+  return { id: saved.id, src: educationImageSrc(saved.id) };
 }
 
 export async function educationImage(id: string, account: Account | null) {
+  const imageId = id.toLowerCase();
   const media = await db().educationImage.findUnique({
-    where: { id },
-    select: { image: true, mimeType: true, article: { select: { status: true } } },
+    where: { id: imageId },
+    select: {
+      image: true,
+      mimeType: true,
+      article: { select: { status: true, thumbnailImageId: true, content: true } },
+    },
   });
-  if (!media || (media.article.status !== "published" && account?.role !== "admin")) {
+  if (!media) throw new RequestError(404, "Gambar tidak ditemukan.");
+  const visible =
+    media.article.status === "published" &&
+    (media.article.thumbnailImageId === imageId ||
+      Array.from(educationImageSources(media.article.content as JSONContent)).some(
+        (source) => educationImageId(source) === imageId,
+      ));
+  if (!visible && account?.role !== "admin") {
     throw new RequestError(404, "Gambar tidak ditemukan.");
   }
   return new Response(new Uint8Array(media.image), {
     headers: {
       "Content-Type": media.mimeType,
       "Cache-Control":
-        media.article.status === "published" ? "public, max-age=300, must-revalidate" : "private, no-store",
+        visible ? "public, max-age=300, must-revalidate" : "private, no-store",
       "X-Content-Type-Options": "nosniff",
     },
   });

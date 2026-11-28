@@ -18,6 +18,10 @@ import { pageNumber, type ApiRouteContext } from "./shared";
 
 const pushEndpoint = subscriptionInput.pick({ endpoint: true });
 
+function requireFarmer(account: ApiRouteContext["account"]) {
+  if (account.role !== "farmer") throw new RequestError(403, "Fitur ini hanya tersedia untuk akun Petani.");
+}
+
 export async function handleFieldApi({
   request,
   segments,
@@ -29,8 +33,14 @@ export async function handleFieldApi({
   if (resource === "search" && !id && method === "GET")
     return json(await searchDashboardData(account, params.get("q") ?? ""));
   if (method === "GET" && !id) {
-    if (resource === "radar") return json(await radarSnapshot());
-    if (resource === "weather") return json(await getWeather());
+    if (resource === "radar") {
+      if (account.role === "admin") throw new RequestError(403, "Peta radar tersedia untuk Petani dan PPL.");
+      return json(await radarSnapshot());
+    }
+    if (resource === "weather") {
+      if (account.role === "admin") throw new RequestError(403, "Cuaca wilayah tersedia untuk Petani dan PPL.");
+      return json(await getWeather());
+    }
   }
 
   const requestedOwner = request.headers.get("x-vektor-account");
@@ -42,9 +52,11 @@ export async function handleFieldApi({
     if (method === "GET") {
       const staff = params.get("scope") === "ppl";
       if (staff && account.role !== "officer") throw new RequestError(403, "Hanya PPL yang dapat melihat antrean.");
+      if (!staff) requireFarmer(account);
       return json(await listReports(account, params, staff));
     }
     if (method === "POST") {
+      requireFarmer(account);
       if (!requestedOwner) throw new RequestError(403, "Masuk kembali dengan akun pemilik laporan.");
       const { id: reportId, created } = await createReport(request, account);
       return json({ id: reportId }, created ? 201 : 200);
@@ -69,6 +81,7 @@ export async function handleFieldApi({
     }
   }
   if (resource === "plots" && !action) {
+    requireFarmer(account);
     if (!id && method === "GET") return json(await listPlots(account.id));
     if (!id && method === "POST") {
       await addPlot(account.id, await request.json());
@@ -80,6 +93,7 @@ export async function handleFieldApi({
     }
   }
   if (resource === "alerts" && !action) {
+    requireFarmer(account);
     if (!id && method === "GET") return json(await listAlerts(account.id));
     if (id && method === "PATCH") {
       await readAlert(account.id, uuid.parse(id));
@@ -87,6 +101,7 @@ export async function handleFieldApi({
     }
   }
   if (resource === "push" && !id) {
+    requireFarmer(account);
     if (method === "POST") {
       if (!pushConfig()) throw new RequestError(503, "Notifikasi perangkat belum dikonfigurasi.");
       await putSubscription(account.id, await request.json());
@@ -99,6 +114,7 @@ export async function handleFieldApi({
     }
   }
   if (resource === "push" && id === "status" && !action && method === "POST") {
+    requireFarmer(account);
     const { endpoint } = pushEndpoint.parse(await request.json());
     return json({ subscribed: await ownsSubscription(account.id, endpoint) });
   }

@@ -38,13 +38,30 @@ describe("P0.1 access control and cross-account privacy", () => {
     expect(radarAlerts.status).toBe(307);
     const alertsNext = new URL(radarAlerts.headers.get("location") ?? "", baseUrl());
     expect(alertsNext.pathname).toBe("/masuk");
-    expect(alertsNext.searchParams.get("next")).toBe("/radar?view=alerts");
+    expect(alertsNext.searchParams.get("next")).toBe("/radar");
 
     const ppl = await visitor.get("/ppl");
     expect(ppl.status).toBe(307);
     const pplNext = new URL(ppl.headers.get("location") ?? "", baseUrl());
     expect(pplNext.pathname).toBe("/masuk");
     expect(pplNext.searchParams.get("next")).toBe("/ppl");
+
+    for (const path of [
+      "/radar/reports",
+      `/radar/reports/${sampleUuid}/edit`,
+      "/radar/plots",
+      `/ppl/reports/${sampleUuid}?status=verified&page=2`,
+      "/ppl/follow-ups/broadcast",
+      `/ppl/aid-allocations/${sampleUuid}`,
+      `/admin/education/${sampleUuid}/edit`,
+      "/admin/accounts",
+    ]) {
+      const result = await visitor.get(path);
+      expect(result.status).toBe(307);
+      const target = new URL(result.headers.get("location") ?? "", baseUrl());
+      expect(target.pathname).toBe("/masuk");
+      expect(target.searchParams.get("next")).toBe(path);
+    }
 
     const sessionRes = await visitor.get("/api/session");
     expect(sessionRes.status).toBe(200);
@@ -200,6 +217,18 @@ describe("P0.1 access control and cross-account privacy", () => {
     expect(await (await farmerA.postJson("/api/push/status", { endpoint })).json()).toEqual({ subscribed: true });
 
     // Farmer redirected from /ppl and gets 403 on all PPL APIs
+    const privateReportPage = await farmerA.get(`/ppl/reports/${reportId}`);
+    expect(privateReportPage.status).toBe(307);
+    expect(privateReportPage.headers.get("location")).toContain("/radar?notice=ppl-required");
+
+    const privateAdminPage = await officer.get("/admin/education/create");
+    expect(privateAdminPage.status).toBe(307);
+    expect(privateAdminPage.headers.get("location")).toContain("/radar?notice=admin-required");
+
+    const legacy = await farmerA.get("/radar?view=reports&page=1");
+    expect(legacy.status).toBe(307);
+    expect(legacy.headers.get("location")).toContain("/radar/reports?page=1");
+
     const farmerPplPage = await farmerA.get("/ppl");
     expect(farmerPplPage.status).toBe(307);
     expect(farmerPplPage.headers.get("location")).toContain("/radar?notice=ppl-required");

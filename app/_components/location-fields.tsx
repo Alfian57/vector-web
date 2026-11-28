@@ -1,7 +1,7 @@
 "use client";
 
-import { LocateFixed, MapPin } from "lucide-react";
-import { useState } from "react";
+import { LocateFixed } from "lucide-react";
+import { useId, useState } from "react";
 import type { MapPackage, Position } from "@/lib/domain";
 import type { OfflineMap } from "@/lib/pwa/storage";
 import { Map } from "./map";
@@ -15,14 +15,17 @@ export function LocationFields({
   onChange,
   tiles,
   offlineMap,
+  error,
 }: {
   value: Coordinates;
   onChange: (value: Coordinates) => void;
   tiles?: MapPackage;
   offlineMap?: OfflineMap;
+  error?: string;
 }) {
   const [message, setMessage] = useState("");
-  const [showMap, setShowMap] = useState(false);
+  const errorId = useId();
+  const [locating, setLocating] = useState(false);
   const selected =
     value.longitude &&
     value.latitude &&
@@ -36,17 +39,23 @@ export function LocationFields({
   }
 
   function locate() {
+    if (locating) return;
     if (!navigator.geolocation) {
-      setMessage("GPS tidak tersedia. Pilih pin atau isi koordinat.");
+      setMessage("GPS tidak tersedia. Pilih titik di peta atau isi koordinat.");
       return;
     }
     setMessage("Mencari lokasi…");
+    setLocating(true);
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         update(coords);
+        setLocating(false);
         setMessage(`Lokasi ditemukan, ketelitian ±${Math.round(coords.accuracy)} m.`);
       },
-      () => setMessage("Lokasi belum ditemukan. Pilih pin atau isi koordinat."),
+      () => {
+        setLocating(false);
+        setMessage("Lokasi belum ditemukan. Pilih titik di peta atau isi koordinat.");
+      },
       { enableHighAccuracy: true, timeout: 10_000 },
     );
   }
@@ -55,28 +64,28 @@ export function LocationFields({
     <fieldset className={tw("location-fields")}>
       <legend>Lokasi di Karawang</legend>
       <div className={tw("button-row")}>
-        <button className={tw("secondary")} type="button" onClick={locate}>
-          <LocateFixed size={17} /> Gunakan GPS
-        </button>
-        <button className={tw("secondary")} type="button" aria-expanded={showMap} onClick={() => setShowMap(!showMap)}>
-          <MapPin size={17} /> {showMap ? "Tutup peta" : "Pilih pin di peta"}
+        <button className={tw("secondary")} type="button" onClick={locate} disabled={locating}>
+          <LocateFixed size={17} aria-hidden="true" /> {locating ? "Mencari lokasi…" : "Gunakan GPS"}
         </button>
       </div>
-      {showMap && (
-        <Map
-          className={tw("small-map")}
-          tileUrl={tiles?.url}
-          mapTilerKey={tiles?.mapTilerKey}
-          offlineMap={offlineMap}
-          selected={selected}
-          onPick={update}
-        />
-      )}
+      <p className={tw("field-hint")}>
+        Pilih titik langsung di peta. Gunakan GPS untuk memindahkan pin ke lokasi Anda.
+      </p>
+      <Map
+        className={tw("small-map")}
+        tileUrl={tiles?.url}
+        mapTilerKey={tiles?.mapTilerKey}
+        offlineMap={offlineMap}
+        selected={selected}
+        onPick={update}
+      />
       <div className={tw("form-two")}>
         <label>
           <FieldLabel required>Lintang</FieldLabel>
           <input
             name="latitude"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
             type="number"
             placeholder="Contoh: -6.33755"
             step="any"
@@ -91,6 +100,8 @@ export function LocationFields({
           <FieldLabel required>Bujur</FieldLabel>
           <input
             name="longitude"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
             type="number"
             placeholder="Contoh: 107.29758"
             step="any"
@@ -102,6 +113,11 @@ export function LocationFields({
           />
         </label>
       </div>
+      {error && (
+        <p id={errorId} className={tw("error-text")} role="alert">
+          {error}
+        </p>
+      )}
       {message && (
         <p className={tw("small muted")} role="status">
           {message}

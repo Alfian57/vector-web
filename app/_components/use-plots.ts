@@ -13,37 +13,41 @@ type PlotInput = {
   latitude: number;
 };
 
-export function usePlots() {
+export function usePlots(list = true) {
   const [plots, setPlots] = useState<Plot[]>();
   const [busy, setBusy] = useState(false);
   const [issue, setIssue] = useState("");
 
-  const loadPlots = useCallback(async () => {
+  const loadPlots = useCallback(async (signal?: AbortSignal) => {
     try {
-      setPlots(await apiData("plots", plotsSchema));
+      const items = await apiData("plots", plotsSchema, { signal });
+      if (!signal?.aborted) {
+        setPlots(items);
+        setIssue("");
+      }
     } catch (error) {
-      setIssue(errorMessage(error));
+      if (!signal?.aborted) setIssue(errorMessage(error));
     }
   }, []);
 
   useEffect(() => {
+    if (!list) return;
     const controller = new AbortController();
-    void apiData("plots", plotsSchema, { signal: controller.signal })
-      .then((value) => {
-        if (!controller.signal.aborted) setPlots(value);
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) setIssue(errorMessage(error));
-      });
+    void loadPlots(controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [list, loadPlots]);
+
+  function retryPlots() {
+    setIssue("");
+    void loadPlots();
+  }
 
   async function addPlot(input: PlotInput) {
+    if (busy) return false;
     setBusy(true);
     setIssue("");
     try {
       await api("plots", jsonRequest("POST", input));
-      await loadPlots();
       return true;
     } catch (error) {
       setIssue(errorMessage(error));
@@ -54,6 +58,7 @@ export function usePlots() {
   }
 
   async function removePlot(id: string, onRemoved: () => void) {
+    if (busy) return false;
     setBusy(true);
     setIssue("");
     try {
@@ -69,5 +74,5 @@ export function usePlots() {
     }
   }
 
-  return { plots, busy, issue, addPlot, removePlot };
+  return { plots, busy, issue, addPlot, removePlot, retryPlots, clearIssue: () => setIssue("") };
 }

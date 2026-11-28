@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "postinstall": "bun run db:generate",
-    "dev": "bun run dev:prepare && next dev",
+    "dev": "bun run db:generate && bun run dev:prepare && next dev",
     "dev:all": "bun scripts/dev-all.ts",
     "dev:prepare": "bun scripts/prepare-map-worker.ts && bun scripts/build-worker.ts --dev",
     "build": "bun scripts/prepare-map-worker.ts && next build && bun scripts/build-worker.ts",
@@ -25,6 +25,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@base-ui/react": "1.9.0",
     "@logtape/logtape": "^2.4.3",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
@@ -32,6 +33,7 @@
     "@tiptap/extension-image": "^3.35.1",
     "@tiptap/extension-link": "^3.35.1",
     "@tiptap/extension-placeholder": "^3.35.1",
+    "@tiptap/extension-text-style": "3.35.1",
     "@tiptap/pm": "^3.35.1",
     "@tiptap/react": "^3.35.1",
     "@tiptap/starter-kit": "^3.35.1",

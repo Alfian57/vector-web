@@ -39,13 +39,8 @@ test.afterAll(async () => {
   await db().$disconnect();
 });
 
-test("all dashboard roles can manage their profile and confirm logout", async ({ browser }) => {
-  test.setTimeout(180_000);
-  const avatar = await sharp({ create: { width: 80, height: 60, channels: 3, background: { r: 38, g: 92, b: 48 } } })
-    .png()
-    .toBuffer();
-
-  for (const entry of dashboardRoles) {
+for (const entry of dashboardRoles) {
+  test(`the ${entry.role} dashboard can manage its profile and confirm logout`, async ({ browser }) => {
     const user = await createAccount(entry.role, entry.name);
     const context = await browser.newContext({ baseURL });
     try {
@@ -71,6 +66,11 @@ test("all dashboard roles can manage their profile and confirm logout", async ({
       await expect(page.getByRole("status").filter({ hasText: "Nama berhasil diperbarui" })).toBeVisible();
 
       if (entry.role === "farmer") {
+        const avatar = await sharp({
+          create: { width: 80, height: 60, channels: 3, background: { r: 38, g: 92, b: 48 } },
+        })
+          .png()
+          .toBuffer();
         await page.getByLabel("Pilih foto profil (opsional)").setInputFiles({
           name: "avatar.png",
           mimeType: "image/png",
@@ -89,7 +89,7 @@ test("all dashboard roles can manage their profile and confirm logout", async ({
       await page.getByRole("button", { name: updatedTrigger }).click();
       const updatedPanel = page.getByRole("region", { name: "Menu akun" });
       await updatedPanel.getByRole("button", { name: "Keluar", exact: true }).click();
-      const confirmation = page.getByRole("dialog", { name: "Keluar dari VEKTOR?" });
+      const confirmation = page.getByRole("alertdialog", { name: "Keluar dari VEKTOR?" });
       await expect(confirmation).toBeVisible();
       await confirmation.getByRole("button", { name: "Batal" }).click();
       await expect(confirmation).toBeHidden();
@@ -101,7 +101,7 @@ test("all dashboard roles can manage their profile and confirm logout", async ({
         .getByRole("region", { name: "Menu akun" })
         .getByRole("button", { name: "Keluar", exact: true })
         .click();
-      const finalConfirmation = page.getByRole("dialog", { name: "Keluar dari VEKTOR?" });
+      const finalConfirmation = page.getByRole("alertdialog", { name: "Keluar dari VEKTOR?" });
       if (entry.role === "farmer") {
         await context.setOffline(true);
         await finalConfirmation.getByRole("button", { name: "Ya, keluar" }).click();
@@ -114,5 +114,59 @@ test("all dashboard roles can manage their profile and confirm logout", async ({
     } finally {
       await context.close();
     }
+  });
+}
+
+test("admin uses standalone account and article forms with their parent menu active", async ({ browser }) => {
+  const admin = await createAccount("admin", "Admin Rute Uji");
+  const farmer = await createAccount("farmer", "Petani Akses Uji");
+  const context = await browser.newContext({ baseURL });
+  const title = `Artikel rute uji ${randomUUID()}`;
+  try {
+    const signIn = await context.request.post("/api/auth/sign-in/email", {
+      headers: { origin },
+      data: { email: admin.email, password },
+    });
+    expect(signIn.ok(), await signIn.text()).toBeTruthy();
+    const page = await context.newPage();
+    await page.goto(`/admin/accounts?q=${encodeURIComponent(farmer.email)}`);
+    await page
+      .getByRole("table", { name: "Akun dan akses" })
+      .getByRole("link", { name: `Kelola akses ${farmer.name}` })
+      .click();
+    await expect(page).toHaveURL(`/admin/accounts/${farmer.id}`);
+    const nav = page.getByRole("navigation", { name: "Navigasi admin" });
+    await expect(nav.getByRole("link", { name: "Akun dan akses" })).toHaveAttribute("aria-current", "page");
+    await page.getByLabel("Peran baru").selectOption("officer");
+    await page.getByRole("button", { name: "Simpan peran" }).click();
+    await expect(page.getByText("Perubahan akses tersimpan.")).toBeVisible();
+    await page.getByLabel("Alasan").fill("Uji akses sementara");
+    await page.getByRole("button", { name: "Nonaktifkan", exact: true }).click();
+    await page.getByRole("button", { name: "Konfirmasi penonaktifan" }).click();
+    await expect(page.getByRole("button", { name: "Aktifkan akun" })).toBeVisible();
+
+    await nav.getByRole("link", { name: "Edukasi", exact: true }).click();
+    await page.getByRole("link", { name: "Artikel baru" }).click();
+    await expect(page).toHaveURL(/\/admin\/education\/create$/);
+    await expect(nav.getByRole("link", { name: "Edukasi", exact: true })).toHaveAttribute("aria-current", "page");
+    await page.getByLabel("Judul", { exact: false }).fill(title);
+    await page.getByLabel("Kategori").fill("Pemantauan padi");
+    await page.getByRole("textbox", { name: /Ringkasan/ }).fill("Panduan memeriksa gejala pada tanaman padi.");
+    await page.getByLabel("Isi panduan", { exact: true }).fill("Amati gejala pada daun dan periksa kondisi petak.");
+    await page.getByRole("button", { name: "Simpan draf", exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/education\/[^/]+\/edit/);
+    await expect(page.getByText("Draf artikel berhasil disimpan.")).toBeVisible();
+    await page.reload();
+    await expect(page.getByLabel("Judul", { exact: false })).toHaveValue(title);
+
+    const articleId = new URL(page.url()).pathname.split("/")[3];
+    await page.goto(`/admin/education?article=${articleId}`);
+    await expect(page).toHaveURL(`/admin/education/${articleId}/edit`);
+    await page.getByRole("button", { name: "Arsipkan", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Arsipkan artikel" }).click();
+    await expect(page.getByRole("table", { name: "Daftar artikel" }).getByRole("cell", { name: title })).toBeVisible();
+  } finally {
+    await context.close();
+    await db().educationArticle.deleteMany({ where: { title } });
   }
 });

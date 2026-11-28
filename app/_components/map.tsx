@@ -3,15 +3,13 @@
 import type { ComponentProps } from "react";
 import type { RadarMap } from "./radar-map";
 import dynamic from "next/dynamic";
-import { tw } from "@/lib/tw";
+import { DashboardSkeleton } from "./dashboard-state";
 
 const MapContent = dynamic(() => import("./radar-map").then((module) => module.RadarMap), {
   ssr: false,
   loading: () => (
-    <div className={tw("map-frame")}>
-      <p className={tw("map-message")} role="status">
-        Memuat peta Karawang…
-      </p>
+    <div className="dashboard-map-frame">
+      <DashboardSkeleton kind="map" label="Memuat peta Karawang…" />
     </div>
   ),
 });

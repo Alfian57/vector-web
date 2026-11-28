@@ -7,6 +7,7 @@ import {
   type Account,
   type Position,
   type Report,
+  type Page,
   type ReviewCorrection,
   type ReviewEntry,
   type ReviewInput,
@@ -15,6 +16,7 @@ import { Prisma } from "../../generated/prisma/client";
 import { db, transaction, type DatabaseTransaction } from "./db";
 import { RequestError } from "./http";
 import { bumpRevision, recomputeRadar } from "./radar";
+import { dashboardPageSize } from "@/lib/pagination";
 
 const reportColumns = Prisma.sql`r.id, ST_X(r.geom) AS longitude, ST_Y(r.geom) AS latitude,
   r.observed_at AS "observedAt", r.finding::text, r.notes, r.status::text, r.severity::text,
@@ -44,16 +46,45 @@ export async function listReports(account: Account, params: URLSearchParams, sta
   ) {
     throw new RequestError(422, "Filter laporan tidak valid.");
   }
-  const rows = await db().$queryRaw<Report[]>`
+  const reportsPerPage = dashboardPageSize;
+  const database = db();
+  const ownerId = staff ? null : account.id;
+  const totalPromise = database
+    .$queryRaw<{ total: bigint }[]>`
+      SELECT COUNT(*) AS total
+      FROM reports r
+      WHERE (${ownerId}::text IS NULL OR r.owner_id = ${ownerId})
+        AND (${status || null}::report_status IS NULL OR r.status = ${status || null}::report_status)
+        AND (${finding || null}::finding IS NULL OR r.finding = ${finding || null}::finding)
+    `
+    .then((rows) => rows[0]?.total)
+    .catch(() => undefined);
+  const [rows, total] = await Promise.all([
+    database.$queryRaw<Report[]>`
+      SELECT ${reportColumns}
+      FROM reports r JOIN districts d ON d.id = r.district_id
+      WHERE (${ownerId}::text IS NULL OR r.owner_id = ${ownerId})
+        AND (${status || null}::report_status IS NULL OR r.status = ${status || null}::report_status)
+        AND (${finding || null}::finding IS NULL OR r.finding = ${finding || null}::finding)
+      ORDER BY r.submitted_at DESC, r.id DESC
+      LIMIT ${reportsPerPage + 1} OFFSET ${page * reportsPerPage}
+    `,
+    totalPromise,
+  ]);
+  return {
+    reports: rows.slice(0, reportsPerPage),
+    hasMore: rows.length > reportsPerPage,
+    totalPages: total === undefined ? undefined : Math.ceil(Number(total) / reportsPerPage),
+  };
+}
+
+export async function findOfficerReport(id: string) {
+  const [report] = await db().$queryRaw<(Omit<Report, "observedAt"> & { observedAt: Date })[]>`
     SELECT ${reportColumns}
     FROM reports r JOIN districts d ON d.id = r.district_id
-    WHERE (${staff ? null : account.id}::text IS NULL OR r.owner_id = ${staff ? null : account.id})
-      AND (${status || null}::report_status IS NULL OR r.status = ${status || null}::report_status)
-      AND (${finding || null}::finding IS NULL OR r.finding = ${finding || null}::finding)
-    ORDER BY r.submitted_at DESC, r.id DESC
-    LIMIT 51 OFFSET ${page * 50}
+    WHERE r.id = ${id}::uuid
   `;
-  return { reports: rows.slice(0, 50), hasMore: rows.length > 50 };
+  return report ? { ...report, observedAt: report.observedAt.toISOString() } : undefined;
 }
 
 export async function createReport(request: Request, owner: Account) {
@@ -140,14 +171,25 @@ export async function reportPhoto(account: Account, id: string) {
   });
 }
 
-export async function listReportReviews(id: string, page: number) {
-  const rows = await db().$queryRaw<ReviewEntry[]>`
-    SELECT h.revision AS "reviewRevision", h.status::text, h.finding::text, h.severity::text, h.note AS "reviewNote",
-      h.reason, u.name AS reviewer, h.recorded_at AS "recordedAt"
-    FROM report_review_history h LEFT JOIN "user" u ON u.id = h.reviewer_id
-    WHERE h.report_id = ${id}::uuid ORDER BY h.revision DESC LIMIT 11 OFFSET ${page * 10}
-  `;
-  return { entries: rows.slice(0, 10), hasMore: rows.length > 10 };
+export async function listReportReviews(id: string, page: number): Promise<Page<ReviewEntry>> {
+  const database = db();
+  const [rows, total] = await Promise.all([
+    database.$queryRaw<ReviewEntry[]>`
+      SELECT h.revision AS "reviewRevision", h.status::text, h.finding::text, h.severity::text, h.note AS "reviewNote",
+        h.reason, u.name AS reviewer, h.recorded_at AS "recordedAt"
+      FROM report_review_history h LEFT JOIN "user" u ON u.id = h.reviewer_id
+      WHERE h.report_id = ${id}::uuid ORDER BY h.revision DESC
+        LIMIT ${dashboardPageSize + 1} OFFSET ${page * dashboardPageSize}
+    `,
+    database.$queryRaw<{ total: bigint }[]>`
+      SELECT COUNT(*) AS total FROM report_review_history WHERE report_id = ${id}::uuid
+    `,
+  ]);
+  return {
+    entries: rows.slice(0, dashboardPageSize),
+    hasMore: rows.length > dashboardPageSize,
+    totalPages: Math.ceil(Number(total[0]?.total ?? 0) / dashboardPageSize),
+  };
 }
 
 export async function reviewReport(id: string, reviewer: Account, review: ReviewInput | ReviewCorrection) {

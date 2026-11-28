@@ -128,6 +128,7 @@ export type EducationArticle = {
   category: string;
   summary: string;
   content: Record<string, unknown>;
+  thumbnailSrc: string | null;
   status: EducationStatus;
   author: string;
   updatedAt: string;
@@ -163,7 +164,7 @@ export type AdminSearchResults = {
   education: Array<{ id: string; title: string; category: string; status: EducationStatus }>;
   logs: Array<{ id: string; action: string; category: string; summary: string; createdAt: string }>;
 };
-export type DashboardSearchKind = "report" | "plot" | "alert" | "follow-up" | "aid-allocation" | "education";
+export type DashboardSearchKind = "report" | "plot" | "follow-up" | "aid-allocation" | "education";
 export type DashboardSearchEntry = {
   id: string;
   kind: DashboardSearchKind;
@@ -189,7 +190,7 @@ export type Plot = Position & { id: string; name: string; districtName: string }
 export type Alert = { id: string; title: string; body: string; createdAt: string; districtName: string; read: boolean };
 export type FollowUp = z.infer<typeof followUpInput> & { updatedAt: string; districtName: string };
 export type FollowUpEntry = FollowUp & { id: string; author: string };
-export type Page<T> = { entries: T[]; hasMore: boolean };
+export type Page<T> = { entries: T[]; hasMore: boolean; totalPages?: number };
 export type District = { id: string; name: string };
 export type AidAllocation = z.infer<typeof aidAllocationInput> & {
   districtName: string;
@@ -208,8 +209,8 @@ export type AidCorrection = {
   author: string;
   recordedAt: string;
 };
-export type AidAllocations = { allocations: AidAllocation[]; hasMore: boolean };
-export type AidHistory = { deliveries: AidDelivery[]; hasMore: boolean };
+export type AidAllocations = { allocations: AidAllocation[]; hasMore: boolean; totalPages?: number };
+export type AidHistory = { deliveries: AidDelivery[]; hasMore: boolean; totalPages?: number };
 export type DistrictSummary = {
   id: string;
   name: string;

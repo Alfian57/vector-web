@@ -1,9 +1,11 @@
 import { aidAllocationInput, aidDeliveryInput, type AidAllocation, type AidDelivery } from "@/lib/domain";
+import { Prisma } from "../../generated/prisma/client";
 import { db, transaction, type DatabaseTransaction } from "./db";
 import { RequestError } from "./http";
 import { bumpRevision } from "./radar";
+import { dashboardPageSize } from "@/lib/pagination";
 
-const pageSize = 10;
+const pageSize = dashboardPageSize;
 
 export async function lockAidAllocation(client: DatabaseTransaction, id: string) {
   const [allocation] = await client.$queryRaw<Omit<AidAllocation, "deliveredQuantity">[]>`
@@ -22,14 +24,33 @@ export async function deliveredAidQuantity(client: DatabaseTransaction, id: stri
   return _sum.quantity ?? 0;
 }
 
-export async function listAidAllocations(page: number) {
-  const rows = await db().$queryRaw<AidAllocation[]>`
-    SELECT a.id, a.district_id AS "districtId", d.name AS "districtName", a.item, a.quantity, a.unit, a.note, a.revision,
-      COALESCE((SELECT sum(s.quantity) FROM aid_deliveries s WHERE s.allocation_id = a.id AND s.voided_at IS NULL), 0)::integer AS "deliveredQuantity"
+const allocationColumns = Prisma.sql`a.id, a.district_id AS "districtId", d.name AS "districtName", a.item, a.quantity, a.unit, a.note, a.revision,
+      COALESCE((SELECT sum(s.quantity) FROM aid_deliveries s WHERE s.allocation_id = a.id AND s.voided_at IS NULL), 0)::integer AS "deliveredQuantity"`;
+
+export async function findAidAllocation(id: string) {
+  const [allocation] = await db().$queryRaw<AidAllocation[]>`
+    SELECT ${allocationColumns}
     FROM aid_allocations a JOIN districts d ON d.id = a.district_id
-    ORDER BY a.created_at DESC, a.id DESC LIMIT ${pageSize + 1} OFFSET ${page * pageSize}
+    WHERE a.id = ${id}::uuid
   `;
-  return { allocations: rows.slice(0, pageSize), hasMore: rows.length > pageSize };
+  return allocation;
+}
+
+export async function listAidAllocations(page: number) {
+  const database = db();
+  const [rows, total] = await Promise.all([
+    database.$queryRaw<AidAllocation[]>`
+      SELECT ${allocationColumns}
+      FROM aid_allocations a JOIN districts d ON d.id = a.district_id
+      ORDER BY a.created_at DESC, a.id DESC LIMIT ${pageSize + 1} OFFSET ${page * pageSize}
+    `,
+    database.$queryRaw<{ total: bigint }[]>`SELECT COUNT(*) AS total FROM aid_allocations`,
+  ]);
+  return {
+    allocations: rows.slice(0, pageSize),
+    hasMore: rows.length > pageSize,
+    totalPages: Math.ceil(Number(total[0]?.total ?? 0) / pageSize),
+  };
 }
 
 export async function createAidAllocation(authorId: string, body: unknown) {
@@ -59,13 +80,34 @@ export async function createAidAllocation(authorId: string, body: unknown) {
   });
 }
 
-export async function listAidDeliveries(allocationId: string, page: number) {
-  const rows = await db().$queryRaw<AidDelivery[]>`
-    SELECT s.id, s.quantity, s.recipient, s.note, s.recorded_at AS "recordedAt", s.revision, s.voided_at IS NOT NULL AS voided
-    FROM aid_deliveries s WHERE s.allocation_id = ${allocationId}::uuid
-    ORDER BY s.recorded_at DESC, s.id DESC LIMIT ${pageSize + 1} OFFSET ${page * pageSize}
+const deliveryColumns = Prisma.sql`s.id, s.quantity, s.recipient, s.note, s.recorded_at AS "recordedAt", s.revision,
+  s.voided_at IS NOT NULL AS voided`;
+
+export async function findAidDelivery(allocationId: string, deliveryId: string) {
+  const [delivery] = await db().$queryRaw<(Omit<AidDelivery, "recordedAt"> & { recordedAt: Date })[]>`
+    SELECT ${deliveryColumns}
+    FROM aid_deliveries s WHERE s.allocation_id = ${allocationId}::uuid AND s.id = ${deliveryId}::uuid
   `;
-  return { deliveries: rows.slice(0, pageSize), hasMore: rows.length > pageSize };
+  return delivery ? { ...delivery, recordedAt: delivery.recordedAt.toISOString() } : undefined;
+}
+
+export async function listAidDeliveries(allocationId: string, page: number) {
+  const database = db();
+  const [rows, total] = await Promise.all([
+    database.$queryRaw<AidDelivery[]>`
+      SELECT ${deliveryColumns}
+      FROM aid_deliveries s WHERE s.allocation_id = ${allocationId}::uuid
+      ORDER BY s.recorded_at DESC, s.id DESC LIMIT ${pageSize + 1} OFFSET ${page * pageSize}
+    `,
+    database.$queryRaw<{ total: bigint }[]>`
+      SELECT COUNT(*) AS total FROM aid_deliveries WHERE allocation_id = ${allocationId}::uuid
+    `,
+  ]);
+  return {
+    deliveries: rows.slice(0, pageSize),
+    hasMore: rows.length > pageSize,
+    totalPages: Math.ceil(Number(total[0]?.total ?? 0) / pageSize),
+  };
 }
 
 export async function recordAidDelivery(allocationId: string, authorId: string, body: unknown) {

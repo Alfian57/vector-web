@@ -8,8 +8,8 @@ import {
   officerPath,
   officerRequiredPath,
   radarPath,
-  radarSection,
-  radarSectionPath,
+  dashboardReturnPath,
+  isRouteWithin,
   signInFor,
   signInPath,
 } from "@/lib/routes";
@@ -20,17 +20,14 @@ export async function proxy(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
   const isSignIn = pathname === signInPath;
   const isWhatsAppLink = searchParams.get("mode") === "link";
-  const isOfficer = pathname === officerPath || pathname.startsWith(`${officerPath}/`);
-  const isAdmin = pathname === adminPath || pathname.startsWith(`${adminPath}/`);
-  const section = radarSection(searchParams.get("view"));
-  const destination = isAdmin
-    ? pathname
-    : isOfficer
-      ? officerPath
-      : pathname === radarPath
-        ? radarSectionPath(section)
-        : null;
-  if (!destination && !isSignIn) return NextResponse.next();
+  const isOfficer = isRouteWithin(pathname, officerPath);
+  const isAdmin = isRouteWithin(pathname, adminPath);
+  const isRadar = isRouteWithin(pathname, radarPath);
+  const query = new URLSearchParams(searchParams);
+  query.delete("_rsc");
+  const destination = dashboardReturnPath(
+    isOfficer || isAdmin || isRadar ? `${pathname}${query.size ? `?${query}` : ""}` : null,
+  );
 
   function redirect(path: string) {
     return NextResponse.redirect(new URL(path, request.url), {
@@ -48,7 +45,7 @@ export async function proxy(request: NextRequest) {
       const account = await getAccount(request.headers);
       if (!account) return isWhatsAppLink ? redirect(signInPath) : continuePrivate();
       if (isWhatsAppLink) return continuePrivate();
-      return redirect(dashboardForRole(account.role));
+      return redirect(dashboardReturnPath(searchParams.get("next"), account.role) ?? dashboardForRole(account.role));
     } catch (error) {
       console.error("VEKTOR sign-in redirect check failed", dependencyFailure(error) ?? "service_unavailable");
       return continuePrivate();
@@ -60,13 +57,18 @@ export async function proxy(request: NextRequest) {
   try {
     const account = await getAccount(request.headers);
     if (!account) return redirect(signInFor(destination));
-    if (isOfficer && account.role !== "officer") return redirect(officerRequiredPath);
-    if (isAdmin && account.role !== "admin") return redirect(adminRequiredPath);
-    return NextResponse.next({ headers: { "Cache-Control": "private, no-store" } });
+    if (isRadar && account.role !== "farmer") return redirect(dashboardForRole(account.role));
+    if (isOfficer && account.role !== "officer") {
+      return redirect(account.role === "farmer" ? officerRequiredPath : dashboardForRole(account.role));
+    }
+    if (isAdmin && account.role !== "admin") {
+      return redirect(account.role === "farmer" ? adminRequiredPath : dashboardForRole(account.role));
+    }
+    return continuePrivate();
   } catch (error) {
     console.error("VEKTOR dashboard access failed", dependencyFailure(error) ?? "service_unavailable");
     return redirect(accountUnavailablePath);
   }
 }
 
-export const config = { matcher: ["/masuk", "/radar", "/ppl/:path*", "/admin/:path*"] };
+export const config = { matcher: ["/", "/masuk", "/radar/:path*", "/ppl/:path*", "/admin/:path*"] };

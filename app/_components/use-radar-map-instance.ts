@@ -7,7 +7,14 @@ import { tw } from "@/lib/tw";
 import { FileSource, PMTiles, Protocol } from "pmtiles";
 import { mapBounds, type DistrictSummary, type Position } from "@/lib/domain";
 import type { OfflineMap } from "@/lib/pwa/storage";
-import { districtFill, districtStates, localRadarStyle, localSource, type DistrictState } from "./radar-style";
+import {
+  districtFill,
+  districtsSource,
+  districtStates,
+  localRadarStyle,
+  localSource,
+  type DistrictState,
+} from "./radar-style";
 import { updatePopup, type PopupState } from "./radar-map-popup";
 
 const protocol = new Protocol();
@@ -19,12 +26,14 @@ export function useRadarMapInstance({
   tileUrl,
   offlineMap,
   onPick,
+  fitDistricts,
 }: {
   container: RefObject<HTMLDivElement | null>;
   summaries: readonly DistrictSummary[] | undefined;
   tileUrl: string | undefined;
   offlineMap: OfflineMap | undefined;
   onPick: ((point: Position) => void) | undefined;
+  fitDistricts: boolean | undefined;
 }) {
   const map = useRef<maplibre.Map | null>(null);
   const localStyle = useRef<StyleSpecification | null>(null);
@@ -69,10 +78,16 @@ export function useRadarMapInstance({
           "NavigationControl.ZoomOut": "Perkecil peta",
           "Popup.CloseButton": "Tutup ringkasan",
         },
-        maxBounds: [
-          [106.63, -6.93],
-          [108.05, -5.55],
-        ],
+        // A wide overview needs more horizontal room to fit every district.
+        maxBounds: fitDistricts
+          ? [
+              [105.9, -7.05],
+              [108.8, -5.45],
+            ]
+          : [
+              [106.63, -6.93],
+              [108.05, -5.55],
+            ],
         fadeDuration: 0,
       });
     } catch {
@@ -84,7 +99,8 @@ export function useRadarMapInstance({
     instance.addControl(new maplibre.NavigationControl({ showCompass: false }), "top-right");
     instance.on("load", () => setReady(true));
     instance.on("error", (event) => {
-      if ("sourceId" in event && event.sourceId === localSource) setTileIssue(true);
+      if ("sourceId" in event && (event.sourceId === localSource || event.sourceId === districtsSource))
+        setTileIssue(true);
     });
     instance.on("click", (event) => {
       const { lng, lat } = event.lngLat;
@@ -120,7 +136,7 @@ export function useRadarMapInstance({
       localStyle.current = null;
       instance.remove();
     };
-  }, [container, offlineMap, tileUrl]);
+  }, [container, offlineMap, tileUrl, fitDistricts]);
 
   return { map, localStyle, usingProvider, popup, currentDistricts, ready, tileIssue, mapIssue };
 }

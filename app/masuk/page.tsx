@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { AuthForm } from "./auth-form";
+import { DashboardSkeleton } from "../_components/dashboard-state";
 import { tw } from "@/lib/tw";
 
 export default function SignInPage() {
@@ -7,7 +8,7 @@ export default function SignInPage() {
     <Suspense
       fallback={
         <main className={tw("auth-layout")}>
-          <p role="status">Memuat akun…</p>
+          <DashboardSkeleton label="Memuat akun…" kind="auth" />
         </main>
       }
     >

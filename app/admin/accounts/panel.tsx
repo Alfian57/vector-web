@@ -1,40 +1,94 @@
 "use client";
 
+import { DashboardSkeleton, DashboardState } from "@/app/_components/dashboard-state";
+import { DataTable } from "@/app/_components/data-table";
+import { ActionIcon } from "@/app/_components/action-icon";
+import { Pagination } from "@/app/_components/pagination";
+import { AccountFiltersDialog } from "./filters-dialog";
+import { AccountAccessDialog } from "./access-dialog";
+import type { UserRow } from "./types";
 import { useEffect, useState } from "react";
-import { ApiError, api, apiData } from "@/lib/client";
+import { useSearchParams } from "next/navigation";
+import { ApiError, apiData } from "@/lib/client";
 import { adminAccountsResponseSchema } from "@/lib/api-contracts";
 import { tw } from "@/lib/tw";
+import { pageQueryValue, parsePageIndex, patchBrowserQuery } from "@/lib/query-state";
 
-type UserRow = {
-  id: string;
-  name: string;
-  email: string;
-  phoneNumber: string | null;
-  role: string;
-  banned: boolean;
-  banReason: string | null;
-  createdAt: string;
+const rolePresentation: Record<string, { label: string; tone: "farmer" | "officer" | "admin" }> = {
+  farmer: { label: "Petani", tone: "farmer" },
+  officer: { label: "Petugas PPL", tone: "officer" },
+  admin: { label: "Admin", tone: "admin" },
 };
+const accountRoles = new Set(Object.keys(rolePresentation));
+const accountStates = new Set(["active", "banned"]);
+
+function AccountRoleBadge({ role }: { role: string }) {
+  const presentation = rolePresentation[role] ?? rolePresentation.admin;
+
+  return (
+    <span className={`${tw("admin-badge")} dashboard-account-role-badge--${presentation.tone}`}>
+      {presentation.label}
+    </span>
+  );
+}
 
 export function AccountsPanel({
   initial,
   initialHasMore,
-  initialQuery = "",
+  initialTotalPages,
+  initialAccessAccount = null,
 }: {
   initial: UserRow[];
   initialHasMore: boolean;
-  initialQuery?: string;
+  initialTotalPages?: number;
+  initialAccessAccount?: UserRow | null;
 }) {
+  const search = useSearchParams();
   const [accounts, setAccounts] = useState(initial);
-  const [query, setQuery] = useState(initialQuery);
-  const [role, setRole] = useState("");
-  const [state, setState] = useState("");
-  const [message, setMessage] = useState("");
+  const rawQuery = search.get("q") ?? "";
+  const rawRole = search.get("role") ?? "";
+  const rawState = search.get("state") ?? "";
+  const rawPage = search.get("page");
+  const query = rawQuery.trim().slice(0, 100);
+  const role = accountRoles.has(rawRole) ? rawRole : "";
+  const state = accountStates.has(rawState) ? rawState : "";
+  const page = parsePageIndex(rawPage);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(initialHasMore);
+  const [totalPages, setTotalPages] = useState(initialTotalPages);
+  const [selectedAccount, setSelectedAccount] = useState<UserRow | null>(initialAccessAccount);
+
+  useEffect(() => {
+    const id = search.get("manage");
+    if (!id) {
+      setSelectedAccount(null);
+      return;
+    }
+    const account = accounts.find((entry) => entry.id === id);
+    if (account) setSelectedAccount(account);
+  }, [accounts, search]);
+
+  useEffect(() => {
+    const normalizedPage = pageQueryValue(page);
+    if (
+      (search.has("q") && !query) ||
+      (search.has("role") && !role) ||
+      (search.has("state") && !state) ||
+      rawQuery !== query ||
+      rawRole !== role ||
+      rawState !== state ||
+      rawPage !== normalizedPage
+    ) {
+      patchBrowserQuery({
+        q: query || null,
+        role: role || null,
+        state: state || null,
+        page: normalizedPage,
+      }, "replace");
+    }
+  }, [page, query, rawPage, rawQuery, rawRole, rawState, role, search, state]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -43,11 +97,14 @@ export function AccountsPanel({
     if (role) params.set("role", role);
     if (state) params.set("state", state);
     params.set("page", String(page));
+    setError("");
+    setLoading(true);
     void apiData(`admin/accounts?${params}`, adminAccountsResponseSchema, { signal: controller.signal })
       .then((value) => {
         if (controller.signal.aborted) return;
         setAccounts(value.accounts);
         setHasMore(value.hasMore);
+        setTotalPages(value.totalPages);
         setError("");
         setLoading(false);
       })
@@ -59,197 +116,126 @@ export function AccountsPanel({
     return () => controller.abort();
   }, [query, role, state, page, reloadKey]);
 
+  useEffect(() => {
+    if (totalPages === undefined || page < totalPages) return;
+    patchBrowserQuery({ page: pageQueryValue(Math.max(0, totalPages - 1)) }, "replace");
+  }, [page, totalPages]);
+
   function reload() {
     setLoading(true);
     setError("");
     setReloadKey((value) => value + 1);
   }
 
-  async function change(id: string, body: unknown) {
-    setMessage("");
-    setError("");
-    try {
-      await api(`admin/accounts/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      setMessage("Perubahan akses tersimpan.");
-      reload();
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : "Perubahan belum tersimpan.");
-    }
+  function clearFilters() {
+    patchBrowserQuery({ q: null, role: null, state: null, page: null });
+  }
+
+  function openAccessDialog(user: UserRow) {
+    setSelectedAccount(user);
+    patchBrowserQuery({ manage: user.id });
+  }
+
+  function closeAccessDialog() {
+    setSelectedAccount(null);
+    patchBrowserQuery({ manage: null }, "replace");
+  }
+
+  function updateAccount(updated: UserRow) {
+    setAccounts((current) => current.map((account) => (account.id === updated.id ? updated : account)));
+    setSelectedAccount(updated);
+    reload();
   }
 
   return (
-    <section className={tw("admin-panel")}>
-      <form
-        className={tw("admin-toolbar")}
-        onSubmit={(event) => {
-          event.preventDefault();
-          reload();
-        }}
-      >
-        <label>
-          Cari akun <span>(opsional)</span>
-          <input
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setPage(0);
-              setLoading(true);
-            }}
-            placeholder="Nama, email, atau nomor WhatsApp"
+    <>
+      <div className={tw("action-row")}>
+        <AccountFiltersDialog
+          filters={{ query, role, state }}
+          onApply={(filters) => {
+            patchBrowserQuery({
+              q: filters.query || null,
+              role: filters.role || null,
+              state: filters.state || null,
+              page: null,
+            });
+          }}
+        />
+      </div>
+      <section className={tw("admin-panel")} aria-label="Akun dan akses">
+        {error && (
+          <DashboardState
+            compact
+            kind="error"
+            title="Daftar akun belum dapat diperbarui"
+            description={error}
+            action={
+              <button className={tw("secondary")} onClick={reload}>
+                Coba lagi
+              </button>
+            }
           />
-        </label>
-        <label>
-          Peran <span>(opsional)</span>
-          <select
-            value={role}
-            onChange={(event) => {
-              setRole(event.target.value);
-              setPage(0);
-              setLoading(true);
-            }}
+        )}
+        {accounts.length ? (
+          <DataTable
+            label="Akun dan akses"
+            columns={["Pengguna", "Email", "Nomor telepon", "Peran", "Status", "Aksi"]}
+            busy={loading}
           >
-            <option value="">Semua peran</option>
-            <option value="farmer">Petani</option>
-            <option value="officer">Petugas PPL</option>
-            <option value="admin">Admin</option>
-          </select>
-        </label>
-        <label>
-          Status <span>(opsional)</span>
-          <select
-            value={state}
-            onChange={(event) => {
-              setState(event.target.value);
-              setPage(0);
-              setLoading(true);
-            }}
-          >
-            <option value="">Semua status</option>
-            <option value="active">Aktif</option>
-            <option value="banned">Dinonaktifkan</option>
-          </select>
-        </label>
-        <button className={tw("secondary")} disabled={loading}>
-          {loading ? "Memuat…" : "Terapkan"}
-        </button>
-      </form>
-      {(message || error) && (
-        <p className={tw(`admin-feedback ${error ? "error" : ""}`)} role={error ? "alert" : "status"}>
-          {error || message}
-        </p>
-      )}
-      <div className={tw("admin-table-wrap")}>
-        <table className={tw("admin-table")}>
-          <thead>
-            <tr>
-              <th>Pengguna</th>
-              <th>Peran</th>
-              <th>Status</th>
-              <th>Kelola akses</th>
-            </tr>
-          </thead>
-          <tbody>
             {accounts.map((user) => (
               <tr key={user.id}>
                 <td>
                   <strong>{user.name}</strong>
-                  <small>{user.email}</small>
-                  {user.phoneNumber && <small>{user.phoneNumber}</small>}
                 </td>
-                <td>{user.role === "farmer" ? "Petani" : user.role === "officer" ? "Petugas PPL" : "Admin"}</td>
+                <td>{user.email || "—"}</td>
+                <td>{user.phoneNumber || "—"}</td>
                 <td>
-                  <span className={tw(`admin-badge ${user.banned ? "bad" : ""}`)}>
+                  <AccountRoleBadge role={user.role} />
+                </td>
+                <td>
+                  <span className={tw(`admin-badge ${user.banned ? "bad" : "tag-verified"}`)}>
                     {user.banned ? "Dinonaktifkan" : "Aktif"}
                   </span>
                   {user.banned && user.banReason && <small>Alasan: {user.banReason}</small>}
                 </td>
                 <td>
-                  {user.role === "admin" ? (
-                    <span className={tw("admin-help")}>Akses Admin dikelola langsung di database.</span>
-                  ) : (
-                    <div className={tw("admin-form")}>
-                      <label>
-                        Peran baru <span className={tw("admin-required")}>*</span>
-                        <select
-                          required
-                          value={user.role}
-                          onChange={(event) => void change(user.id, { action: "role", role: event.target.value })}
-                        >
-                          <option value="farmer">Petani</option>
-                          <option value="officer">Petugas PPL</option>
-                        </select>
-                      </label>
-                      {user.banned ? (
-                        <button className={tw("secondary")} onClick={() => void change(user.id, { action: "unban" })}>
-                          Aktifkan akun
-                        </button>
-                      ) : (
-                        <details>
-                          <summary className={tw("text-link")}>Nonaktifkan akun</summary>
-                          <form
-                            className={tw("admin-form")}
-                            onSubmit={(event) => {
-                              event.preventDefault();
-                              const data = new FormData(event.currentTarget);
-                              void change(user.id, { action: "ban", reason: data.get("reason") });
-                            }}
-                          >
-                            <label>
-                              Alasan <span className={tw("admin-required")}>*</span>
-                              <input
-                                name="reason"
-                                required
-                                minLength={3}
-                                maxLength={200}
-                                placeholder="Jelaskan alasan penonaktifan"
-                              />
-                            </label>
-                            <button className={tw("danger")}>Nonaktifkan</button>
-                          </form>
-                        </details>
-                      )}
-                    </div>
-                  )}
+                  <ActionIcon
+                    onClick={() => openAccessDialog(user)}
+                    label="Kelola akses"
+                    icon="user"
+                  />
                 </td>
               </tr>
             ))}
-            {!accounts.length && (
-              <tr>
-                <td colSpan={4}>{loading ? "Memuat akun…" : "Tidak ada akun yang cocok."}</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      <div className={tw("admin-toolbar")}>
-        <span className={tw("admin-help")}>Halaman {page + 1}</span>
-        <div className={tw("button-row action-row")}>
-          <button
-            className={tw("secondary")}
-            disabled={!page || loading}
-            onClick={() => {
-              setLoading(true);
-              setPage((value) => value - 1);
-            }}
-          >
-            Sebelumnya
-          </button>
-          <button
-            className={tw("secondary")}
-            disabled={!hasMore || loading}
-            onClick={() => {
-              setLoading(true);
-              setPage((value) => value + 1);
-            }}
-          >
-            Berikutnya
-          </button>
-        </div>
-      </div>
-    </section>
+          </DataTable>
+        ) : loading ? (
+          <DashboardSkeleton kind="table" columns={6} label="Memuat akun…" />
+        ) : !error && (query || role || state) ? (
+          <DashboardState
+            kind="filtered"
+            title="Tidak ada akun yang cocok"
+            action={
+              <button type="button" className={tw("secondary")} onClick={clearFilters}>
+                Hapus filter
+              </button>
+            }
+          />
+        ) : (
+          !error && <DashboardState title="Belum ada akun" />
+        )}
+        <Pagination
+          label="Halaman akun"
+          page={page}
+          hasNext={hasMore}
+          totalPages={totalPages}
+          busy={loading}
+          onPage={(nextPage) => {
+            setLoading(true);
+            patchBrowserQuery({ page: pageQueryValue(nextPage) });
+          }}
+        />
+      </section>
+      <AccountAccessDialog user={selectedAccount} onClose={closeAccessDialog} onUpdated={updateAccount} />
+    </>
   );
 }

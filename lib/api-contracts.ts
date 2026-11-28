@@ -57,6 +57,7 @@ const educationArticleBaseSchema = z.object({
   category: z.string(),
   summary: z.string(),
   content: z.record(z.string(), z.unknown()),
+  thumbnailSrc: z.string().nullable().default(null),
   status: educationStatus,
   author: z.string(),
   updatedAt: z.iso.datetime(),
@@ -127,7 +128,7 @@ export const dashboardSearchResponseSchema: z.ZodType<DashboardSearchResponse> =
   entries: z.array(
     z.object({
       id: z.string(),
-      kind: z.enum(["report", "plot", "alert", "follow-up", "aid-allocation", "education"]),
+      kind: z.enum(["report", "plot", "follow-up", "aid-allocation", "education"]),
       label: z.string(),
       description: z.string(),
       href: z.string(),
@@ -144,7 +145,11 @@ export const reportSchema: z.ZodType<Report> = reportInput.extend({
   districtName: z.string(),
 });
 
-export const reportPageResponseSchema = z.object({ reports: z.array(reportSchema), hasMore: z.boolean() });
+export const reportPageResponseSchema = z.object({
+  reports: z.array(reportSchema),
+  hasMore: z.boolean(),
+  totalPages: z.number().int().nonnegative().optional(),
+});
 
 export const plotSchema: z.ZodType<Plot> = position.extend({
   id: z.string(),
@@ -223,11 +228,13 @@ export const aidCorrectionSchema: z.ZodType<AidCorrection> = z.object({
 export const aidAllocationsSchema: z.ZodType<AidAllocations> = z.object({
   allocations: z.array(aidAllocationSchema),
   hasMore: z.boolean(),
+  totalPages: z.number().int().nonnegative().optional(),
 });
 
 export const aidHistorySchema: z.ZodType<AidHistory> = z.object({
   deliveries: z.array(aidDeliverySchema),
   hasMore: z.boolean(),
+  totalPages: z.number().int().nonnegative().optional(),
 });
 
 export const radarSnapshotSchema: z.ZodType<RadarSnapshot> = z.object({
@@ -278,14 +285,25 @@ export const adminAccountsResponseSchema = z.object({
     }),
   ),
   hasMore: z.boolean(),
+  totalPages: z.number().int().nonnegative().optional(),
 });
 
 export function pageSchema<T>(entry: z.ZodType<T>): z.ZodType<Page<T>> {
-  return z.object({ entries: z.array(entry), hasMore: z.boolean() });
+  return z.object({
+    entries: z.array(entry),
+    hasMore: z.boolean(),
+    totalPages: z.number().int().nonnegative().optional(),
+  });
 }
 
 export const subscriptionStatusSchema = z.object({ subscribed: z.boolean() });
 export const pushKeySchema = z.object({ key: z.string().nullable() });
 export const avatarImageResponseSchema = z.object({ image: z.string().min(1) });
-export const educationSaveResponseSchema = z.object({ id: z.string(), slug: z.string(), status: educationStatus });
+export const educationSaveResponseSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  status: educationStatus,
+  thumbnailSrc: z.string().nullable(),
+  imageSources: z.record(z.string(), z.string()),
+});
 export const educationImageResponseSchema = z.object({ src: z.string().min(1) });

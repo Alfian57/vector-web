@@ -3,16 +3,27 @@ import { deliveredAidQuantity, lockAidAllocation } from "./aid";
 import { db, transaction } from "./db";
 import { RequestError } from "./http";
 import { bumpRevision } from "./radar";
+import { dashboardPageSize } from "@/lib/pagination";
 
-const pageSize = 10;
+const pageSize = dashboardPageSize;
 
 export async function listAidCorrections(allocationId: string, page: number): Promise<Page<AidCorrection>> {
-  const rows = await db().$queryRaw<AidCorrection[]>`
-    SELECT c.id::text AS id, c.kind, c.reason, c.previous, c.current, u.name AS author, c.recorded_at AS "recordedAt"
-    FROM aid_corrections c JOIN "user" u ON u.id = c.author_id
-    WHERE c.allocation_id = ${allocationId}::uuid ORDER BY c.id DESC LIMIT ${pageSize + 1} OFFSET ${page * pageSize}
-  `;
-  return { entries: rows.slice(0, pageSize), hasMore: rows.length > pageSize };
+  const database = db();
+  const [rows, total] = await Promise.all([
+    database.$queryRaw<AidCorrection[]>`
+      SELECT c.id::text AS id, c.kind, c.reason, c.previous, c.current, u.name AS author, c.recorded_at AS "recordedAt"
+      FROM aid_corrections c JOIN "user" u ON u.id = c.author_id
+      WHERE c.allocation_id = ${allocationId}::uuid ORDER BY c.id DESC LIMIT ${pageSize + 1} OFFSET ${page * pageSize}
+    `,
+    database.$queryRaw<{ total: bigint }[]>`
+      SELECT COUNT(*) AS total FROM aid_corrections WHERE allocation_id = ${allocationId}::uuid
+    `,
+  ]);
+  return {
+    entries: rows.slice(0, pageSize),
+    hasMore: rows.length > pageSize,
+    totalPages: Math.ceil(Number(total[0]?.total ?? 0) / pageSize),
+  };
 }
 
 function allocationSnapshot({ districtName, item, quantity, unit, note }: Omit<AidAllocation, "deliveredQuantity">) {

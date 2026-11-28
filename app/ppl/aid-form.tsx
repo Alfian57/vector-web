@@ -3,6 +3,7 @@
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { api, errorMessage, jsonRequest } from "@/lib/client";
 import { FieldLabel } from "../_components/field-label";
+import { showToast } from "../_components/toast";
 import { tw } from "@/lib/tw";
 
 export { AidQuantity } from "./aid-quantity";
@@ -21,7 +22,7 @@ export function AidForm({
   path: string;
   button: string;
   success: string;
-  onSaved: () => void;
+  onSaved?: () => void;
   disabled?: boolean;
   correction?: { target: "allocation" | "delivery" | "void-delivery"; revision: number; deliveryId?: string };
   originalNote?: string;
@@ -30,7 +31,6 @@ export function AidForm({
 }) {
   const lastSubmission = useRef<{ signature: string; id: string }>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
   const [issue, setIssue] = useState("");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -43,8 +43,8 @@ export function AidForm({
     const id = lastSubmission.current?.signature === signature ? lastSubmission.current.id : crypto.randomUUID();
     lastSubmission.current = { signature, id };
     setBusy(true);
-    setMessage("");
     setIssue("");
+    let saved = false;
     try {
       await api(
         path,
@@ -52,12 +52,13 @@ export function AidForm({
       );
       form.reset();
       lastSubmission.current = null;
-      setMessage(success);
-      onSaved();
+      showToast(success);
+      saved = true;
+      onSaved?.();
     } catch (error) {
       setIssue(errorMessage(error));
     } finally {
-      setBusy(false);
+      if (!saved || !onSaved) setBusy(false);
     }
   }
 
@@ -80,7 +81,11 @@ export function AidForm({
         {correction && (
           <label>
             <FieldLabel required>
-              {correction.target === "void-delivery" ? "Alasan pembatalan" : "Alasan koreksi bantuan"}
+              {correction.target === "void-delivery"
+                ? "Alasan pembatalan"
+                : correction.target === "delivery"
+                  ? "Alasan koreksi penyaluran"
+                  : "Alasan koreksi alokasi"}
             </FieldLabel>
             <textarea
               name="reason"
@@ -102,11 +107,6 @@ export function AidForm({
           </button>
         </div>
       </fieldset>
-      {message && (
-        <p className={tw("inline-note")} role="status">
-          {message}
-        </p>
-      )}
       {issue && (
         <p className={tw("error-text")} role="alert">
           {issue}

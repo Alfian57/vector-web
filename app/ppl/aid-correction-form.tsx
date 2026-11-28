@@ -11,6 +11,7 @@ export function AidCorrectionForm({
   edit,
   allocation,
   districts,
+  disabled,
   onCancel,
   onSaved,
 }: {
@@ -18,6 +19,7 @@ export function AidCorrectionForm({
   edit: AidEdit;
   allocation: AidAllocation;
   districts: District[];
+  disabled: boolean;
   onCancel: () => void;
   onSaved: () => void;
 }) {
@@ -31,16 +33,28 @@ export function AidCorrectionForm({
   return (
     <AidForm
       path={path}
+      disabled={disabled}
       correction={correction}
       originalNote={note}
       onCancel={onCancel}
       onSaved={onSaved}
-      button={canceling ? "Konfirmasi pembatalan penyaluran" : "Simpan koreksi bantuan"}
-      success="Koreksi bantuan tersimpan."
+      button={
+        canceling
+          ? "Konfirmasi pembatalan penyaluran"
+          : edit.target === "delivery"
+            ? "Simpan koreksi penyaluran"
+            : "Simpan koreksi alokasi"
+      }
+      success={
+        canceling
+          ? "Penyaluran dibatalkan."
+          : edit.target === "delivery"
+            ? "Koreksi penyaluran tersimpan."
+            : "Koreksi alokasi tersimpan."
+      }
     >
       {edit.target === "allocation" ? (
         <>
-          <h4>Koreksi alokasi</h4>
           <p>Kecamatan, barang, dan satuan dapat dikoreksi sebelum penyaluran pertama.</p>
           <AllocationFields
             districts={districts}
@@ -50,7 +64,6 @@ export function AidCorrectionForm({
         </>
       ) : canceling ? (
         <>
-          <h4>Batalkan penyaluran</h4>
           <p>
             Penyaluran untuk <strong>{edit.delivery.recipient}</strong> akan ditandai batal. Jumlahnya kembali tersedia
             pada alokasi ini.
@@ -58,7 +71,7 @@ export function AidCorrectionForm({
         </>
       ) : (
         <>
-          <h4>Koreksi penyaluran</h4>
+          <p>Perbarui penerima, jumlah, atau catatan penyaluran dan jelaskan alasan koreksinya.</p>
           <DeliveryFields
             delivery={edit.delivery}
             max={allocation.quantity - allocation.deliveredQuantity + edit.delivery.quantity}

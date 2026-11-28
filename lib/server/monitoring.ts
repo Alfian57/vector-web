@@ -4,6 +4,7 @@ import { db, transaction } from "./db";
 import { RequestError } from "./http";
 import { bumpRevision, createAlert } from "./radar";
 import { locateDistrict } from "./reports";
+import { dashboardPageSize } from "@/lib/pagination";
 
 export async function listPlots(ownerId: string) {
   const rows = await db().$queryRaw<Plot[]>`
@@ -81,22 +82,42 @@ export async function broadcast(authorId: string, body: unknown) {
   });
 }
 
-export async function listFollowUps() {
-  const rows = await db().$queryRaw<FollowUp[]>`
-    SELECT f.district_id AS "districtId", d.name AS "districtName", f.kind, f.status, f.note, f.updated_at AS "updatedAt"
-    FROM follow_ups f JOIN districts d ON d.id = f.district_id ORDER BY f.updated_at DESC
-  `;
-  return rows;
+export async function listFollowUps(page: number): Promise<Page<FollowUp>> {
+  const database = db();
+  const [rows, total] = await Promise.all([
+    database.$queryRaw<FollowUp[]>`
+      SELECT f.district_id AS "districtId", d.name AS "districtName", f.kind, f.status, f.note,
+        f.updated_at AS "updatedAt"
+      FROM follow_ups f JOIN districts d ON d.id = f.district_id
+      ORDER BY f.updated_at DESC, f.district_id, f.kind
+      LIMIT ${dashboardPageSize + 1} OFFSET ${page * dashboardPageSize}
+    `,
+    database.$queryRaw<{ total: bigint }[]>`SELECT COUNT(*) AS total FROM follow_ups`,
+  ]);
+  return {
+    entries: rows.slice(0, dashboardPageSize),
+    hasMore: rows.length > dashboardPageSize,
+    totalPages: Math.ceil(Number(total[0]?.total ?? 0) / dashboardPageSize),
+  };
 }
 
 export async function listFollowUpEntries(page: number): Promise<Page<FollowUpEntry>> {
-  const rows = await db().$queryRaw<FollowUpEntry[]>`
-    SELECT f.id, f.district_id AS "districtId", d.name AS "districtName", f.kind, f.status, f.note,
-      f.recorded_at AS "updatedAt", u.name AS author
-    FROM follow_up_entries f JOIN districts d ON d.id = f.district_id JOIN "user" u ON u.id = f.author_id
-    ORDER BY f.recorded_at DESC, f.id DESC LIMIT 11 OFFSET ${page * 10}
-  `;
-  return { entries: rows.slice(0, 10), hasMore: rows.length > 10 };
+  const database = db();
+  const [rows, total] = await Promise.all([
+    database.$queryRaw<FollowUpEntry[]>`
+      SELECT f.id, f.district_id AS "districtId", d.name AS "districtName", f.kind, f.status, f.note,
+        f.recorded_at AS "updatedAt", u.name AS author
+      FROM follow_up_entries f JOIN districts d ON d.id = f.district_id JOIN "user" u ON u.id = f.author_id
+      ORDER BY f.recorded_at DESC, f.id DESC
+      LIMIT ${dashboardPageSize + 1} OFFSET ${page * dashboardPageSize}
+    `,
+    database.$queryRaw<{ total: bigint }[]>`SELECT COUNT(*) AS total FROM follow_up_entries`,
+  ]);
+  return {
+    entries: rows.slice(0, dashboardPageSize),
+    hasMore: rows.length > dashboardPageSize,
+    totalPages: Math.ceil(Number(total[0]?.total ?? 0) / dashboardPageSize),
+  };
 }
 
 export async function writeFollowUp(authorId: string, body: unknown) {

@@ -4,13 +4,29 @@ import { db, transaction } from "./db";
 import { writeActivity } from "./activity-log";
 import { RequestError } from "./http";
 import { adminPageIndex } from "./admin-pagination";
+import { dashboardPageSize } from "@/lib/pagination";
 
-const pageSize = 25;
+const pageSize = dashboardPageSize;
 const accountChange = z.discriminatedUnion("action", [
   z.object({ action: z.literal("role"), role: z.enum(["farmer", "officer"]) }),
   z.object({ action: z.literal("ban"), reason: z.string().trim().min(3).max(200) }),
   z.object({ action: z.literal("unban") }),
 ]);
+
+const accountFields = {
+  id: true,
+  name: true,
+  email: true,
+  phoneNumber: true,
+  role: true,
+  banned: true,
+  banReason: true,
+  createdAt: true,
+} as const;
+
+export async function findAdminAccount(id: string) {
+  return db().user.findUnique({ where: { id }, select: accountFields });
+}
 
 export async function listAdminAccounts(params: URLSearchParams) {
   const page = adminPageIndex(params);
@@ -35,23 +51,21 @@ export async function listAdminAccounts(params: URLSearchParams) {
         }
       : {}),
   };
-  const rows = await db().user.findMany({
-    where,
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    skip: page * pageSize,
-    take: pageSize + 1,
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phoneNumber: true,
-      role: true,
-      banned: true,
-      banReason: true,
-      createdAt: true,
-    },
-  });
-  return { accounts: rows.slice(0, pageSize), hasMore: rows.length > pageSize };
+  const [rows, total] = await Promise.all([
+    db().user.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: page * pageSize,
+      take: pageSize + 1,
+      select: accountFields,
+    }),
+    db().user.count({ where }),
+  ]);
+  return {
+    accounts: rows.slice(0, pageSize),
+    hasMore: rows.length > pageSize,
+    totalPages: Math.ceil(total / pageSize),
+  };
 }
 
 export async function changeAccountAccess(actor: Account, userId: string, body: unknown) {

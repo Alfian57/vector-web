@@ -4,21 +4,28 @@ import { useEffect, useState } from "react";
 import { api, apiData, errorMessage, jsonRequest } from "@/lib/client";
 import { alertSchema, pushKeySchema, subscriptionStatusSchema } from "@/lib/api-contracts";
 import type { Alert } from "@/lib/domain";
+import { showToast } from "./toast";
 
 const alertsSchema = alertSchema.array();
 
 export function useAlerts() {
   const [alerts, setAlerts] = useState<Alert[]>();
   const [issue, setIssue] = useState("");
-  const [message, setMessage] = useState("");
   const [subscribed, setSubscribed] = useState<boolean>();
   const [busy, setBusy] = useState(false);
+  const [marking, setMarking] = useState<string>();
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
     void apiData("alerts", alertsSchema, { signal })
-      .then(setAlerts)
+      .then((items) => {
+        if (!signal.aborted) {
+          setAlerts(items);
+          setIssue("");
+        }
+      })
       .catch((error) => {
         if (!signal.aborted) setIssue(errorMessage(error));
       });
@@ -40,32 +47,37 @@ export function useAlerts() {
         if (!signal.aborted) setSubscribed(value);
       });
     return () => controller.abort();
-  }, []);
+  }, [reload]);
 
   async function markAlertRead(id: string) {
+    if (marking) return;
+    setMarking(id);
+    setIssue("");
     try {
       await api(`alerts/${id}`, jsonRequest("PATCH"));
       setAlerts((items) => items?.map((item) => (item.id === id ? { ...item, read: true } : item)));
     } catch (error) {
       setIssue(errorMessage(error));
+    } finally {
+      setMarking(undefined);
     }
   }
 
   async function togglePushNotifications() {
+    if (busy) return;
     if (!("PushManager" in window) || !("Notification" in window) || !navigator.serviceWorker) {
-      setMessage("Perangkat ini belum mendukung Web Push. Di iPhone, buka VEKTOR dari Layar Utama.");
+      showToast("Perangkat ini belum mendukung Web Push. Di iPhone, buka VEKTOR dari Layar Utama.", "warning");
       return;
     }
     setBusy(true);
-    setMessage("");
     try {
       if (!subscribed && (await Notification.requestPermission()) !== "granted") {
-        setMessage("Izin notifikasi belum diberikan. Peringatan tetap tersedia di kotak masuk.");
+        showToast("Izin notifikasi belum diberikan. Peringatan tetap tersedia di kotak masuk.", "warning");
         return;
       }
       const registration = await navigator.serviceWorker.getRegistration();
       if (!registration?.active) {
-        setMessage("Muat ulang aplikasi untuk mengaktifkan notifikasi.");
+        showToast("Muat ulang aplikasi untuk mengaktifkan notifikasi.", "info");
         return;
       }
       const existing = await registration.pushManager.getSubscription();
@@ -73,12 +85,12 @@ export function useAlerts() {
         await api("push", jsonRequest("DELETE", { endpoint: existing.endpoint }));
         setSubscribed(false);
         await existing.unsubscribe().catch(() => {});
-        setMessage("Notifikasi perangkat dinonaktifkan.");
+        showToast("Notifikasi perangkat dinonaktifkan.");
         return;
       }
       const { key } = await apiData("push-key", pushKeySchema);
       if (!key) {
-        setMessage("Notifikasi perangkat belum dikonfigurasi.");
+        showToast("Notifikasi perangkat belum dikonfigurasi.", "warning");
         return;
       }
       const base64 = key.replace(/-/g, "+").replace(/_/g, "/");
@@ -88,13 +100,25 @@ export function useAlerts() {
         (await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: serverKey }));
       await api("push", jsonRequest("POST", subscription.toJSON()));
       setSubscribed(true);
-      setMessage("Notifikasi perangkat diaktifkan.");
+      showToast("Notifikasi perangkat diaktifkan.");
     } catch (error) {
-      setMessage(errorMessage(error));
+      showToast(errorMessage(error), "error");
     } finally {
       setBusy(false);
     }
   }
 
-  return { alerts, issue, message, subscribed, busy, markAlertRead, togglePushNotifications };
+  return {
+    alerts,
+    issue,
+    subscribed,
+    busy,
+    marking,
+    markAlertRead,
+    togglePushNotifications,
+    retryAlerts: () => {
+      setIssue("");
+      setReload((value) => value + 1);
+    },
+  };
 }

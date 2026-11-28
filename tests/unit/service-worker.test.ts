@@ -172,6 +172,6 @@ describe("service worker event handlers", () => {
     }
     await Promise.all(waitUntilPromises.splice(0));
     expect(closed).toBe(true);
-    expect(harness.openedWindows).toEqual(["/radar?view=alerts"]);
+    expect(harness.openedWindows).toEqual(["/radar"]);
   });
 });

@@ -1,5 +1,4 @@
 import {
-  Bell,
   BookOpen,
   ClipboardList,
   MapPin,
@@ -11,10 +10,18 @@ import {
   UserRound,
 } from "lucide-react";
 import type { Account } from "@/lib/domain";
-import { educationPath, officerPath, profilePath, type RadarSection } from "@/lib/routes";
+import {
+  educationPath,
+  officerPath,
+  officerReportsPath,
+  officerFollowUpsPath,
+  officerAidPath,
+  profilePath,
+  radarSectionPath,
+} from "@/lib/routes";
 import type { DashboardSearchItem } from "./use-dashboard-global-search";
 
-export function radarSearchItems(role: Exclude<Account["role"], "admin">, navigate: (section: RadarSection) => void) {
+export function radarSearchItems(role: Exclude<Account["role"], "admin">) {
   const items: DashboardSearchItem[] = [
     {
       id: "radar",
@@ -22,7 +29,7 @@ export function radarSearchItems(role: Exclude<Account["role"], "admin">, naviga
       description: "Peta temuan hama dan kondisi cuaca",
       keywords: "peta pemantauan kecamatan",
       icon: Radar,
-      onSelect: () => navigate("radar"),
+      href: radarSectionPath("radar"),
     },
     {
       id: "reports",
@@ -30,7 +37,7 @@ export function radarSearchItems(role: Exclude<Account["role"], "admin">, naviga
       description: "Lihat laporan dan antrean perangkat",
       keywords: "temuan terkirim sinkronisasi riwayat",
       icon: ClipboardList,
-      onSelect: () => navigate("reports"),
+      href: radarSectionPath("reports"),
     },
     {
       id: "create-report",
@@ -38,7 +45,7 @@ export function radarSearchItems(role: Exclude<Account["role"], "admin">, naviga
       description: "Catat temuan padi di lahan",
       keywords: "foto kamera hama penyakit",
       icon: ScanLine,
-      onSelect: () => navigate("create"),
+      href: `${radarSectionPath("reports")}#buat-laporan`,
     },
     {
       id: "plots",
@@ -46,15 +53,15 @@ export function radarSearchItems(role: Exclude<Account["role"], "admin">, naviga
       description: "Kelola lokasi sawah yang dipantau",
       keywords: "lahan lokasi sawah peta",
       icon: MapPin,
-      onSelect: () => navigate("plots"),
+      href: radarSectionPath("plots"),
     },
     {
-      id: "alerts",
-      label: "Peringatan",
-      description: "Lihat pemberitahuan untuk kecamatan",
-      keywords: "notifikasi klaster temuan",
-      icon: Bell,
-      onSelect: () => navigate("alerts"),
+      id: "create-plot",
+      label: "Tambah petak",
+      description: "Daftarkan lokasi sawah",
+      keywords: "buat petak pantauan lokasi",
+      icon: MapPin,
+      href: `${radarSectionPath("plots")}#tambah-petak`,
     },
     {
       id: "education",
@@ -89,7 +96,7 @@ export function radarSearchItems(role: Exclude<Account["role"], "admin">, naviga
       description: "Tinjau laporan yang masuk",
       keywords: "verifikasi petani laporan",
       icon: ClipboardList,
-      href: `${officerPath}#ppl-queue`,
+      href: officerReportsPath,
     });
     items.push({
       id: "officer-actions",
@@ -97,7 +104,7 @@ export function radarSearchItems(role: Exclude<Account["role"], "admin">, naviga
       description: "Kelola siaran dan catatan penyuluhan",
       keywords: "operasional petani pesan penyuluhan",
       icon: Megaphone,
-      href: `${officerPath}#ppl-actions`,
+      href: officerFollowUpsPath,
     });
     items.push({
       id: "officer-aid",
@@ -105,7 +112,7 @@ export function radarSearchItems(role: Exclude<Account["role"], "admin">, naviga
       description: "Catat alokasi dan penyaluran bantuan",
       keywords: "pupuk benih kelompok tani",
       icon: Package,
-      href: `${officerPath}#ppl-aid`,
+      href: officerAidPath,
     });
   }
 

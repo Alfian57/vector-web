@@ -1,20 +1,34 @@
 "use client";
 
+import Link from "next/link";
 import { Check, MapPin } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { api, errorMessage, jsonRequest } from "@/lib/client";
+import { DashboardSkeleton, DashboardState } from "../_components/dashboard-state";
 import { FieldLabel } from "../_components/field-label";
-import { findings, formatDate, severities, statuses, type Report, type ReviewEntry } from "@/lib/domain";
-import { reviewEntrySchema } from "@/lib/api-contracts";
-import { StaffHistory } from "./history";
+import { SeverityBadge } from "../_components/severity-badge";
+import { findings, formatDate, severities, statuses, type Report } from "@/lib/domain";
 import { tw } from "@/lib/tw";
 
-export function ReviewPanel({ report, onReviewed }: { report: Report; onReviewed: () => void }) {
-  const [decision, setDecision] = useState<"verified" | "rejected" | "">("");
+export function ReviewPanel({
+  report,
+  correcting,
+  correctionHref,
+  detailHref,
+  onReviewed,
+}: {
+  report: Report;
+  correcting: boolean;
+  correctionHref: string;
+  detailHref: string;
+  onReviewed: () => void;
+}) {
+  const [decision, setDecision] = useState<"verified" | "rejected" | "">(
+    correcting && report.status !== "pending" ? report.status : "",
+  );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [correctionRevision, setCorrectionRevision] = useState<number>();
-  const correcting = correctionRevision !== undefined;
+  const [photo, setPhoto] = useState<"loading" | "ready" | "failed">("loading");
   const historyPath = `reports/${report.id}/reviews`;
 
   async function review(event: FormEvent<HTMLFormElement>) {
@@ -31,13 +45,12 @@ export function ReviewPanel({ report, onReviewed }: { report: Report; onReviewed
           finding: form.get("finding"),
           severity: form.get("severity"),
           note: form.get("note"),
-          ...(correcting ? { revision: correctionRevision, reason: form.get("reason") } : {}),
+          ...(correcting ? { revision: report.reviewRevision, reason: form.get("reason") } : {}),
         }),
       );
       onReviewed();
     } catch (failure) {
       setError(errorMessage(failure));
-    } finally {
       setBusy(false);
     }
   }
@@ -53,15 +66,27 @@ export function ReviewPanel({ report, onReviewed }: { report: Report; onReviewed
         </div>
         <span className={tw(`tag tag-${report.status}`)}>{statuses[report.status]}</span>
       </div>
-      <div className={tw("review-image")}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- This authenticated photo cannot use the image optimizer. */}
-        <img src={`/api/reports/${report.id}/photo`} alt="Foto daun dari laporan petani" />
+      <div className="dashboard-review-image">
+        {photo === "loading" && <DashboardSkeleton kind="photo" label="Memuat foto laporan…" />}
+        {photo === "failed" ? (
+          <DashboardState compact kind="error" title="Foto laporan belum dapat ditampilkan" />
+        ) : (
+          // Private photos must be requested with the current session.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={`/api/reports/${report.id}/photo`}
+            alt="Foto daun dari laporan petani"
+            className={photo === "loading" ? "dashboard-review-image-pending" : undefined}
+            onLoad={() => setPhoto("ready")}
+            onError={() => setPhoto("failed")}
+          />
+        )}
       </div>
       <div className={tw("review-summary")}>
-        <strong>
-          {findings[report.finding]}
-          {report.severity && ` · ${severities[report.severity]}`}
-        </strong>
+        <div className="dashboard-enum-cell">
+          <strong>{findings[report.finding]}</strong>
+          {report.severity && <SeverityBadge severity={report.severity} />}
+        </div>
         <p>
           <MapPin size={15} /> {report.latitude.toFixed(5)}, {report.longitude.toFixed(5)}
         </p>
@@ -70,41 +95,11 @@ export function ReviewPanel({ report, onReviewed }: { report: Report; onReviewed
       </div>
       {report.status !== "pending" && (
         <>
-          <StaffHistory<ReviewEntry>
-            title="Riwayat verifikasi"
-            path={historyPath}
-            revision={report.reviewRevision}
-            schema={reviewEntrySchema}
-            entryKey={(entry) => entry.reviewRevision}
-            renderEntry={(entry) => (
-              <>
-                <div>
-                  <strong>
-                    {findings[entry.finding]}
-                    {entry.severity && ` · ${severities[entry.severity]}`}
-                  </strong>
-                  <p>
-                    {entry.reviewer ? `${entry.reviewer} · ` : ""}
-                    {formatDate(entry.recordedAt)} WIB
-                  </p>
-                  {entry.reviewNote && <p>{entry.reviewNote}</p>}
-                  {entry.reason && <p>Alasan koreksi · {entry.reason}</p>}
-                </div>
-                <span className={tw(`tag tag-${entry.status}`)}>{statuses[entry.status]}</span>
-              </>
-            )}
-          />
           {!correcting && (
             <div className={tw("panel-note button-row action-row")}>
-              <button
-                className={tw("secondary")}
-                onClick={() => {
-                  if (report.status !== "pending") setDecision(report.status);
-                  setCorrectionRevision(report.reviewRevision);
-                }}
-              >
+              <Link className={tw("secondary")} href={correctionHref}>
                 Koreksi keputusan
-              </button>
+              </Link>
             </div>
           )}
         </>
@@ -198,18 +193,9 @@ export function ReviewPanel({ report, onReviewed }: { report: Report; onReviewed
           )}
           <div className={tw("button-row action-row")}>
             {correcting && (
-              <button
-                type="button"
-                className={tw("secondary")}
-                disabled={busy}
-                onClick={() => {
-                  setCorrectionRevision(undefined);
-                  setDecision("");
-                  setError("");
-                }}
-              >
+              <Link className={tw("secondary")} href={detailHref}>
                 Batal koreksi
-              </button>
+              </Link>
             )}
             <button className={tw(decision === "rejected" ? "danger" : "primary")} disabled={busy || !decision}>
               <Check size={17} />{" "}

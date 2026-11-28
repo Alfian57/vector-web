@@ -1,6 +1,12 @@
 import type { Account, DashboardSearchEntry, DashboardSearchResponse } from "@/lib/domain";
 import { findings, statuses } from "@/lib/domain";
-import { educationArticlePath, officerPath, radarSectionPath } from "@/lib/routes";
+import {
+  educationArticlePath,
+  officerAllocationPath,
+  officerFollowUpsPath,
+  officerReportPath,
+  radarSectionPath,
+} from "@/lib/routes";
 import { Prisma } from "../../generated/prisma/client";
 import { db } from "./db";
 import { RequestError } from "./http";
@@ -58,7 +64,7 @@ async function searchReports(account: Account, pattern: string): Promise<Dashboa
     kind: "report",
     label: `${findings[row.finding]} · ${row.districtName}`,
     description: shortDescription(`${statuses[row.status]} · ${row.notes}`),
-    href: staff ? `${officerPath}#ppl-queue` : radarSectionPath("reports"),
+    href: staff ? officerReportPath(row.id) : radarSectionPath("reports"),
   }));
 }
 
@@ -77,27 +83,6 @@ async function searchPlots(ownerId: string, pattern: string): Promise<DashboardS
     label: row.name,
     description: `Petak pantauan · ${row.districtName}`,
     href: radarSectionPath("plots"),
-  }));
-}
-
-async function searchAlerts(ownerId: string, pattern: string): Promise<DashboardSearchEntry[]> {
-  const rows = await db().$queryRaw<{ id: string; title: string; body: string; districtName: string }[]>`
-    SELECT a.id::text AS id, a.title, a.body, d.name AS "districtName"
-    FROM alert_recipients r
-    JOIN alerts a ON a.id = r.alert_id
-    JOIN districts d ON d.id = a.district_id
-    WHERE r.owner_id = ${ownerId}
-      AND (a.title ILIKE ${pattern} OR a.body ILIKE ${pattern} OR d.name ILIKE ${pattern})
-    ORDER BY a.created_at DESC, a.id DESC
-    LIMIT ${resultLimit}
-  `;
-
-  return rows.map((row): DashboardSearchEntry => ({
-    id: row.id,
-    kind: "alert",
-    label: row.title,
-    description: shortDescription(`${row.districtName} · ${row.body}`),
-    href: radarSectionPath("alerts"),
   }));
 }
 
@@ -120,7 +105,7 @@ async function searchFollowUps(pattern: string): Promise<DashboardSearchEntry[]>
     kind: "follow-up",
     label: `${row.kind === "outreach" ? "Penyuluhan" : "Bantuan"} · ${row.districtName}`,
     description: shortDescription(`${row.status === "planned" ? "Direncanakan" : "Selesai"} · ${row.note}`),
-    href: `${officerPath}#ppl-actions`,
+    href: officerFollowUpsPath,
   }));
 }
 
@@ -147,7 +132,7 @@ async function searchAidAllocations(query: string): Promise<DashboardSearchEntry
     kind: "aid-allocation",
     label: `${row.item} · ${row.district.name}`,
     description: shortDescription(`${row.quantity} ${row.unit}${row.note ? ` · ${row.note}` : ""}`),
-    href: `${officerPath}#ppl-aid`,
+    href: officerAllocationPath(row.id),
   }));
 }
 
@@ -182,13 +167,12 @@ export async function searchDashboardData(account: Account, rawQuery: string): P
 
   const pattern = queryPattern(query);
   if (account.role === "farmer") {
-    const [reports, plots, alerts, education] = await Promise.all([
+    const [reports, plots, education] = await Promise.all([
       searchReports(account, pattern),
       searchPlots(account.id, pattern),
-      searchAlerts(account.id, pattern),
       searchPublishedEducation(query),
     ]);
-    return { entries: [...reports, ...plots, ...alerts, ...education] };
+    return { entries: [...reports, ...plots, ...education] };
   }
 
   const [reports, followUps, aidAllocations, education] = await Promise.all([
