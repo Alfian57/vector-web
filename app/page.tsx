@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { educationPath, radarPath } from "@/lib/routes";
 import { Brand } from "./_components/brand";
+import { LandingHeader } from "./_components/landing-header";
+import { LandingNavigation } from "./_components/landing-navigation";
 import { tw } from "@/lib/tw";
 
 const photoSource = "https://commons.wikimedia.org/wiki/File:Cikampek_Rice_field_in_west_Java,_Indonesia.jpg";
@@ -23,14 +25,6 @@ const fieldReportSource =
   "https://bbpopt.tanamanpangan.pertanian.go.id/berita/tanggap-opt%2C-kementan-bergerak-cepat%2C-bbpopt-lakukan-bimbingan-teknis-dan-gerakan-pengendalian-di-sentra-beras-karawang";
 const primaryActionClassName =
   "inline-flex min-h-[42px] w-fit shrink-0 items-center justify-center gap-2 rounded-[7px] border border-transparent bg-accent px-4 py-3 text-[.87rem] leading-[1.25] font-[640] text-forest hover:bg-[#e9f8bc]";
-
-const sectionLinks = [
-  { href: "#tentang", label: "Tentang" },
-  { href: "#fitur", label: "Fitur" },
-  { href: "#cara-kerja", label: "Cara kerja" },
-  { href: "#faq", label: "Tanya jawab" },
-  { href: educationPath, label: "Edukasi" },
-] as const;
 
 const features = [
   {
@@ -98,46 +92,12 @@ const questions = [
 
 export default function Home() {
   return (
-    <div className={tw("mx-auto w-[min(calc(100%_-_2_*_clamp(16px,_5vw,_70px)),1320px)]")}>
-      <header
-        className={tw(
-          "grid grid-cols-[1fr_auto_1fr] items-center gap-[14px] py-[22px] max-[760px]:grid-cols-[minmax(0,1fr)_auto] max-[760px]:gap-x-[10px] max-[760px]:gap-y-[6px] max-[760px]:py-[11px] max-[760px]:pb-[13px]",
-        )}
-      >
-        <Brand />
-        <nav
-          className={tw(
-            "flex flex-wrap items-center gap-[clamp(9px,_2vw,_29px)] max-[760px]:col-span-full max-[760px]:row-start-2 max-[760px]:gap-5",
-          )}
-          aria-label="Navigasi beranda"
-        >
-          {sectionLinks.map(({ href, label }) => (
-            <a
-              className={tw(
-                "py-2 text-[.92rem] font-[570] text-muted hover:text-forest hover:underline hover:underline-offset-[5px]",
-              )}
-              key={href}
-              href={href}
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
-        <Link
-          className={tw(
-            "inline-flex min-h-[42px] w-fit items-center justify-center gap-2 justify-self-end rounded-[7px] border border-line bg-surface px-5 py-[9px] text-[.87rem] leading-[1.25] font-[640] text-forest hover:bg-[#edf2e7]",
-          )}
-          href="/masuk"
-        >
-          Masuk
-        </Link>
-      </header>
+    <div className="mx-auto max-w-[1460px] px-[clamp(16px,5vw,70px)]">
+      <LandingHeader />
 
       <main>
         <section
-          className={tw(
-            "grid grid-cols-[minmax(0,_1fr)_minmax(0,_1.18fr)] overflow-hidden rounded-[14px] bg-forest max-[760px]:grid-cols-1",
-          )}
+          className="grid grid-cols-1 overflow-hidden rounded-[14px] bg-forest min-[761px]:grid-cols-[minmax(0,1fr)_minmax(0,1.18fr)]"
           aria-labelledby="landing-title"
         >
           <div className={tw("self-center p-[clamp(24px,_5vw,_67px)] text-[#f9fcf1]")}>
@@ -160,16 +120,14 @@ export default function Home() {
               Buka Radar <ArrowRight size={18} aria-hidden="true" />
             </Link>
           </div>
-          <figure
-            className={tw("relative m-0 min-h-[410px] bg-[#52774c] max-[760px]:aspect-[4/3] max-[760px]:min-h-0")}
-          >
+          <figure className="relative m-0 aspect-4/3 bg-[#52774c] min-[761px]:aspect-auto min-[761px]:min-h-[410px]">
             <Image
               src="/sawah-cikampek.webp"
               alt="Persawahan di Cikampek, Karawang"
               fill
               unoptimized
               preload
-              sizes="(max-width: 760px) 100vw, 55vw"
+              sizes="(min-width: 1460px) 715px, (min-width: 761px) 50vw, 100vw"
               className={tw("object-cover")}
             />
             <figcaption
@@ -187,7 +145,7 @@ export default function Home() {
         <section
           id="tentang"
           className={tw(
-            "my-[clamp(46px,_7vw,_96px)] grid scroll-mt-[22px] grid-cols-[minmax(0,_0.95fr)_minmax(0,_1.05fr)] items-start gap-[clamp(12px,_4vw,_54px)] border-y border-line py-[clamp(23px,_4vw,_50px)] max-[760px]:grid-cols-1",
+            "my-[clamp(46px,_7vw,_96px)] grid scroll-mt-[22px] grid-cols-1 items-start gap-[clamp(12px,_4vw,_54px)] border-y border-line py-[clamp(23px,_4vw,_50px)] min-[761px]:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]",
           )}
           aria-labelledby="story-heading"
         >
@@ -266,7 +224,7 @@ export default function Home() {
           </header>
           <div
             className={tw(
-              "grid grid-cols-[minmax(0,_1.45fr)_minmax(0,_1fr)] items-start gap-[clamp(14px,_3vw,_38px)] max-[760px]:grid-cols-1",
+              "grid grid-cols-1 items-start gap-[clamp(14px,_3vw,_38px)] min-[761px]:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]",
             )}
           >
             <figure className={tw("m-0 overflow-hidden rounded-[11px] border border-line bg-surface")}>
@@ -313,7 +271,7 @@ export default function Home() {
         <section
           id="cara-kerja"
           className={tw(
-            "my-[clamp(46px,_7vw,_96px)] scroll-mt-[22px] rounded-xl border border-line bg-surface p-[clamp(17px,_4vw,_48px)] max-[760px]:grid-cols-1",
+            "my-[clamp(46px,_7vw,_96px)] scroll-mt-[22px] rounded-xl border border-line bg-surface p-[clamp(17px,_4vw,_48px)]",
           )}
           aria-labelledby="process-heading"
         >
@@ -323,7 +281,7 @@ export default function Home() {
             </h2>
           </header>
           <ol
-            className={tw("m-0 grid list-none grid-cols-3 gap-[clamp(14px,_3vw,_34px)] p-0 max-[760px]:grid-cols-1")}
+            className="m-0 grid list-none grid-cols-1 gap-[clamp(14px,3vw,34px)] p-0 min-[761px]:grid-cols-3"
             role="list"
           >
             {steps.map(({ icon: Icon, title, description }, index) => (
@@ -352,11 +310,7 @@ export default function Home() {
               Dirancang untuk kerja bersama
             </h2>
           </header>
-          <div
-            className={tw(
-              "grid grid-cols-3 overflow-hidden rounded-xl border border-[#d4dfcd] bg-[#e6eee1] max-[760px]:grid-cols-1 [&_article]:p-[clamp(17px,_3vw,_32px)] [&_article+article]:border-s-[#c8d6c0] max-[760px]:[&_article+article]:border-s-0 max-[760px]:[&_article+article]:border-t",
-            )}
-          >
+          <div className="grid grid-cols-1 divide-y divide-[#c8d6c0] overflow-hidden rounded-xl border border-[#d4dfcd] bg-[#e6eee1] min-[761px]:grid-cols-3 min-[761px]:divide-x min-[761px]:divide-y-0 [&>article]:p-[clamp(17px,3vw,32px)]">
             <article>
               <Sprout className={tw("mb-3 text-forest")} size={25} aria-hidden="true" />
               <h3 className={tw("text-[clamp(1.08rem,_1.55vw,_1.3rem)]")}>Petani dan pengamat lapangan</h3>
@@ -387,7 +341,7 @@ export default function Home() {
         <section
           id="faq"
           className={tw(
-            "my-[clamp(46px,_7vw,_96px)] grid scroll-mt-[22px] grid-cols-[minmax(0,_0.77fr)_minmax(0,_1.23fr)] items-start gap-x-8 gap-y-[10px] max-[760px]:grid-cols-1",
+            "my-[clamp(46px,_7vw,_96px)] grid scroll-mt-[22px] grid-cols-1 items-start gap-x-8 gap-y-[10px] min-[761px]:grid-cols-[minmax(0,0.77fr)_minmax(0,1.23fr)]",
           )}
           aria-labelledby="faq-heading"
         >
@@ -406,7 +360,7 @@ export default function Home() {
                 >
                   {question}
                   <Plus
-                    className={tw("shrink-0 transition-transform group-open:rotate-45")}
+                    className="shrink-0 group-open:rotate-45 motion-safe:transition-transform"
                     size={19}
                     aria-hidden="true"
                   />
@@ -431,7 +385,7 @@ export default function Home() {
               Cari kecamatan Anda dan lihat temuan terverifikasi di sekitarnya.
             </p>
           </div>
-          <div className={tw("flex shrink-0 flex-wrap items-center gap-4")}>
+          <div className="flex max-w-full min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
             <Link className={tw(primaryActionClassName)} href={radarPath} prefetch={false}>
               Buka Radar <ArrowRight size={18} aria-hidden="true" />
             </Link>
@@ -453,22 +407,7 @@ export default function Home() {
         )}
       >
         <Brand />
-        <nav
-          className={tw("flex flex-wrap items-center gap-[clamp(9px,_2vw,_29px)]")}
-          aria-label="Navigasi kaki halaman"
-        >
-          {sectionLinks.map(({ href, label }) => (
-            <a
-              className={tw(
-                "py-2 text-[.92rem] font-[570] text-muted hover:text-forest hover:underline hover:underline-offset-[5px]",
-              )}
-              key={href}
-              href={href}
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
+        <LandingNavigation label="Navigasi kaki halaman" />
       </footer>
     </div>
   );
